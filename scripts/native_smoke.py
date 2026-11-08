@@ -1,4 +1,4 @@
-"""Native (not mocked) Blender smoke suite for Cloud Spiral v0.3.
+"""Native (not mocked) Blender smoke suite for Cloud Spiral v0.3.1.
 
 Only synthetic meshes are generated. Blender --background --factory-startup
 --python-exit-code 1 --python scripts/native_smoke.py -- SOURCE OUT
@@ -61,12 +61,12 @@ def lobes():
 
 def run(source, out):
     bpy.ops.wm.read_factory_settings(use_empty=True)
-    spec = importlib.util.spec_from_file_location('cloud_spiral_lobe_builder_v03', source)
+    spec = importlib.util.spec_from_file_location('cloud_spiral_lobe_builder_v031', source)
     assert spec is not None and spec.loader is not None
     addon = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = addon
     spec.loader.exec_module(addon)
-    assert tuple(addon.bl_info['version']) == (0, 3, 0)
+    assert tuple(addon.bl_info['version']) == (0, 3, 1)
 
     evidence = {
         'status': 'RUNNING', 'blender': bpy.app.version_string,
@@ -101,6 +101,23 @@ def run(source, out):
             'panel': addon.VIEW3D_PT_cloud_spiral_builder.bl_idname,
             'operator': addon.MESH_OT_cloud_spiral_generate.bl_idname
         })
+
+        def ui_presets():
+            assert settings.ui_show_advanced is False
+            assert abs(settings.three_spread - 1) < 0.0001
+            assert abs(settings.three_side_scale - 1) < 0.0001
+            original_radius = settings.radius
+            original_angular = settings.angular_segments
+            for preset, depth in [('SOFT', 0.055), ('CARVED', 0.14), ('RESET', 0.095)]:
+                assert bpy.ops.mesh.cloud_spiral_preset(preset=preset) == {'FINISHED'}
+                assert abs(settings.groove_depth_ratio - depth) < 0.00001
+                assert settings.radius == original_radius
+                assert settings.angular_segments == original_angular
+            settings.ui_show_advanced = True
+            assert settings.ui_show_advanced is True
+            settings.ui_show_advanced = False
+            return {'presets': 3, 'advanced_toggle': 'PASS', 'unchanged_radius': original_radius}
+        check('ui_presets_and_advanced_toggle', ui_presets)
 
         def single():
             settings.mode = 'SINGLE'
@@ -139,6 +156,27 @@ def run(source, out):
                 evidence['meshes'].append(inspect_mesh(obj.data))
             return {'total_lobes': len(objs), 'selected':len(selected)}
         check('three_lobe_layout_and_selection', three)
+
+        def custom_three():
+            before = len(lobes())
+            baseline = lobes()[3].data
+            old_max_x = max(v.co.x for v in baseline.vertices)
+            settings.three_spread = 1.5
+            settings.three_side_scale = 0.7
+            assert bpy.ops.mesh.cloud_spiral_generate() == {'FINISHED'}
+            added = lobes()[before:]
+            assert len(added) == 3, len(added)
+            assert abs(added[1].location.x - (-0.7 * 1.5 * settings.radius)) < 0.0001
+            assert abs(added[1].location.y - (0.72 * 1.5 * settings.radius)) < 0.0001
+            assert abs(added[2].location.x - (-0.76 * 1.5 * settings.radius)) < 0.0001
+            new_max_x = max(v.co.x for v in added[1].data.vertices)
+            assert abs((new_max_x / old_max_x) - 0.7) < 0.01, (new_max_x, old_max_x)
+            for obj in added:
+                inspect_mesh(obj.data)
+            settings.three_spread = 1.0
+            settings.three_side_scale = 1.0
+            return {'generated': len(added), 'side_scale_ratio': round(new_max_x / old_max_x, 4)}
+        check('three_lobe_custom_layout', custom_three)
 
         def extreme():
             settings.mode = 'SINGLE'
@@ -228,3 +266,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+
