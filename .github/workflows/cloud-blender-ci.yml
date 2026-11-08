@@ -147,7 +147,7 @@ jobs:
         run: |
           set -euo pipefail
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends xvfb xauth libegl1 libgl1 libxkbcommon-x11-0 libxrender1
+          sudo apt-get install -y --no-install-recommends xvfb xauth openbox xdotool scrot libegl1 libgl1 libxkbcommon-x11-0 libxrender1
       - name: Download official Blender release with hash verification
         shell: bash
         run: |
@@ -165,8 +165,9 @@ jobs:
           set -euo pipefail
           mkdir -p evidence/gui
           xvfb-run --auto-servernum --server-args="-screen 0 1600x900x24" \
-            timeout --signal=TERM 150s "$BLENDER_PATH" --factory-startup \
-            --python-exit-code 1 --python scripts/gui_smoke.py -- \
+            bash -c 'openbox >/tmp/cloud-openbox.log 2>&1 & sleep 1; exec timeout --signal=TERM 150s "$@"' \
+            _ "$BLENDER_PATH" --factory-startup --python-exit-code 1 \
+            --python scripts/gui_smoke.py -- \
             addon/cloud_spiral_lobe_builder_v031.py evidence/gui \
             2>&1 | tee evidence/gui/gui.log
           grep -F 'CLOUD_GUI_REAL_BLENDER: PASS' evidence/gui/gui.log
