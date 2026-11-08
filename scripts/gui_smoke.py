@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import subprocess
 import sys
 import traceback
 from pathlib import Path
@@ -28,15 +29,15 @@ OUT.mkdir(parents=True, exist_ok=True)
 REPORT_PATH = OUT / "gui_report.json"
 STATE = {"phase": 0, "registered": False, "addon": None,
          "window": None, "area": None, "region": None,
-         "original_count": None, "created_count": None,
+         "original_count": None, "created_count": None, "xwindow": None,
          "checks": [], "warnings": [], "ticks": 0}
 REPORT = {"blender": bpy.app.version_string, "background": bpy.app.background,
           "status": "RUNNING", "checks": STATE["checks"], "warnings": STATE["warnings"],
           "platform": "Linux Xvfb (virtual screen)",
           "limitations": [
               "N-panel registration and visibility are verified; manual button clicks are not simulated.",
-              "This test does not prove Windows-specific layout, fonts, and mouse behavior.",
-              "Undo/Redo requires a real UI context and is reported independently from ordinary headless checks.",
+              "This test uses X11 keyboard events; it does not replace user testing on Windows.",
+              "Screenshot is taken by scrot from the actual Xvfb display and tested for non-black pixels.",
           ]}
 
 
@@ -147,47 +148,64 @@ def tick():
 
             if STATE["phase"] == 2:
                 image = OUT / "blender_window.png"
-                # Capture the actual Blender GUI, not a Workbench render.
-                assert bpy.ops.screen.screenshot.poll()
-                result = bpy.ops.screen.screenshot(filepath=str(image), check_existing=False)
-                assert result == {"FINISHED"}, result
-                assert image.is_file() and image.stat().st_size > 4096
+                # A Blender screen.screenshot() PNG can be all black on Xvfb;
+                # capture the actual X11 root framebuffer instead.
+                shot = subprocess.run(["scrot", "-z", "-q", "95", str(image)],
+                                      capture_output=True, text=True, check=True)
+                assert image.is_file() and image.stat().st_size > 10000
+                img = bpy.data.images.load(str(image), check_existing=False)
+                try:
+                    sample = [float(img.pixels[i]) for i in range(
+                        0, len(img.pixels)-3, 16000)]
+                    assert len(sample) >= 40
+                    assert max(sample) - min(sample) > 0.12, (
+                        "GUI screenshot is blank/black", min(sample), max(sample))
+                finally:
+                    bpy.data.images.remove(img)
                 record("real_gui_screenshot", {
                     "name": image.name, "size_bytes": image.stat().st_size,
+                    "non_black_verified": True, "source": "X11 framebuffer via scrot",
                 })
                 STATE["phase"] = 3
                 return 0.5
 
             if STATE["phase"] == 3:
-                # Native Blender UI Undo. This is not a mocked bpy module.
-                result = bpy.ops.ed.undo()
-                assert result == {"FINISHED"}, result
-                after_undo = lobe_count()
-                assert after_undo == STATE["original_count"], (
-                    "Undo failed to remove generated lobe",
-                    STATE["original_count"], after_undo,
-                )
-                record("real_gui_undo", {
-                    "result": list(result), "remaining_lobes": after_undo,
-                })
+                # Python bpy.ops.ed.undo.poll() fails even in a GUI timer.
+                # Send real X11 keyboard events instead, then verify scene state.
+                found = subprocess.run(
+                    ["xdotool", "search", "--onlyvisible", "--name", "Blender"],
+                    capture_output=True, text=True, check=True)
+                xwindows = found.stdout.strip().splitlines()
+                assert xwindows, "No visible Blender X11 window"
+                xwin = xwindows[-1].strip()
+                STATE["xwindow"] = xwin
+                subprocess.run(["xdotool", "windowfocus", "--sync", xwin],
+                               check=True, timeout=10)
+                subprocess.run(["xdotool", "key", "--clearmodifiers", "ctrl+z"],
+                               check=True, timeout=10)
+                record("undo_keyboard_shortcut_dispatched", {"xwindow": xwin})
                 STATE["phase"] = 4
-                return 0.5
+                return 1.0
 
             if STATE["phase"] == 4:
-                result = bpy.ops.ed.redo()
-                assert result == {"FINISHED"}, result
-                after_redo = lobe_count()
-                assert after_redo == STATE["created_count"], (
-                    "Redo did not restore generated lobe",
-                    STATE["created_count"], after_redo,
-                )
-                record("real_gui_redo", {
-                    "result": list(result), "remaining_lobes": after_redo,
-                })
+                after_undo = lobe_count()
+                assert after_undo == STATE["original_count"], (
+                    "X11 Ctrl+Z did not undo the generated lobe",
+                    STATE["original_count"], after_undo)
+                record("real_gui_undo", {"remaining_lobes": after_undo,
+                                         "method": "xdotool Ctrl+Z"})
+                subprocess.run(["xdotool", "key", "--clearmodifiers", "ctrl+shift+z"],
+                               check=True, timeout=10)
                 STATE["phase"] = 5
-                return 0.1
+                return 1.0
 
         if STATE["phase"] == 5:
+            after_redo = lobe_count()
+            assert after_redo == STATE["created_count"], (
+                "X11 Ctrl+Shift+Z did not redo the generated lobe",
+                STATE["created_count"], after_redo)
+            record("real_gui_redo", {"remaining_lobes": after_redo,
+                                     "method": "xdotool Ctrl+Shift+Z"})
             return finish("PASS")
         raise RuntimeError("unexpected phase " + str(STATE["phase"]))
     except Exception as exc:
