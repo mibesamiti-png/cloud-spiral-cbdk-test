@@ -111,6 +111,15 @@ jobs:
           "$BLENDER_PATH" --version | head -n 3
           "$BLENDER_PATH" --background --factory-startup --python-exit-code 1 --python scripts/native_smoke.py -- addon/cloud_spiral_lobe_builder_v031.py "evidence/blender-${BLENDER_VERSION}" 2>&1 | tee "evidence/blender-${BLENDER_VERSION}/blender_ci.log"
           grep -F 'CLOUD_REAL_BLENDER: PASS' "evidence/blender-${BLENDER_VERSION}/blender_ci.log"
+      - name: Verify native input bounds, mode safety, and failure rollback
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$BLENDER_PATH" --background --factory-startup --python-exit-code 1 \
+            --python scripts/blender_quality_gate.py -- \
+            addon/cloud_spiral_lobe_builder_v031.py "evidence/blender-${BLENDER_VERSION}" \
+            2>&1 | tee "evidence/blender-${BLENDER_VERSION}/quality_ci.log"
+          grep -F 'CLOUD_REAL_BLENDER_QUALITY: PASS' "evidence/blender-${BLENDER_VERSION}/quality_ci.log"
       - name: Upload Blender reports even on failure
         if: always()
         uses: actions/upload-artifact@v4
