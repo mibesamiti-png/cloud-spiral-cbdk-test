@@ -158,18 +158,27 @@ def run(source, out):
         check('three_lobe_layout_and_selection', three)
 
         def custom_three():
-            before = len(lobes())
-            baseline = lobes()[3].data
-            old_max_x = max(v.co.x for v in baseline.vertices)
+            # Blender's bpy.data.objects iteration may be name-sorted, not creation-sorted.
+            # Compare only operator-selected newly created lobes, and match locations.
+            previous = [o for o in lobes() if o.select_get()]
+            assert len(previous) == 3, len(previous)
+            prior_side = min(previous, key=lambda o: abs(o.location.x + .70 * settings.radius)
+                             + abs(o.location.y - .72 * settings.radius))
+            old_max_x = max(v.co.x for v in prior_side.data.vertices)
             settings.three_spread = 1.5
             settings.three_side_scale = 0.7
             assert bpy.ops.mesh.cloud_spiral_generate() == {'FINISHED'}
-            added = lobes()[before:]
-            assert len(added) == 3, len(added)
-            assert abs(added[1].location.x - (-0.7 * 1.5 * settings.radius)) < 0.0001
-            assert abs(added[1].location.y - (0.72 * 1.5 * settings.radius)) < 0.0001
-            assert abs(added[2].location.x - (-0.76 * 1.5 * settings.radius)) < 0.0001
-            new_max_x = max(v.co.x for v in added[1].data.vertices)
+            added = [o for o in lobes() if o.select_get()]
+            assert len(added) == 3, [o.name for o in added]
+            expected = [(0.30, 0.10), (-0.70 * 1.5, 0.72 * 1.5),
+                        (-0.76 * 1.5, -0.60 * 1.5)]
+            for ex, ey in expected:
+                assert any(abs(o.location.x - ex * settings.radius) < 0.0001
+                           and abs(o.location.y - ey * settings.radius) < 0.0001
+                           for o in added), (ex, ey, [(o.name, tuple(o.location)) for o in added])
+            new_side = min(added, key=lambda o: abs(o.location.x + 1.05 * settings.radius)
+                           + abs(o.location.y - 1.08 * settings.radius))
+            new_max_x = max(v.co.x for v in new_side.data.vertices)
             assert abs((new_max_x / old_max_x) - 0.7) < 0.01, (new_max_x, old_max_x)
             for obj in added:
                 inspect_mesh(obj.data)
