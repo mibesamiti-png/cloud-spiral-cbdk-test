@@ -50,3 +50,26 @@ CLD-01 PASS; CLD-02 PASS; CLD-03 PASS; **CLD-04 95% (GUI pending)**; CLD-05 PASS
 - [Notion project overview](https://app.notion.com/p/412948b7493781d092b2eb7dc2f1e048)
 - [CLD04 full quality report](https://app.notion.com/p/412948b74937818183e1e6250d7e76e0)
 - [CLD05 packaging retrospective](https://app.notion.com/p/412948b7493781d99f6cfa1dc042f8c5)
+
+
+## Latest GUI / Undo automation result (2026-11-09 JST)
+
+**Verified code HEAD:** `4abb4f9c6b981311911eecb8e9d5b7577470df8f`  
+**[CI run 42506059041](https://github.com/mibesamiti-png/cloud-spiral-cbdk-test/actions/runs/42506059041): 5/5 SUCCESS** (3 headless Blender versions, CBDK static scan, 1 Linux virtual GUI test).  
+**[PR CI run 42506061850](https://github.com/mibesamiti-png/cloud-spiral-cbdk-test/actions/runs/42506061850): 5/5 SUCCESS**.
+
+The new `scripts/gui_smoke.py` runs Blender 4.4.3 **without `--background`** inside Xvfb + openbox. It verifies:
+- A real GUI Window/VIEW_3D/N sidebar exists and the Cloud Spiral panel is registered.
+- Factory-startup first-use modal is dismissed with X11 mouse/keyboard events.
+- The addon Soft preset and a single lobe generation work with a true VIEW_3D context.
+- An actual window screenshot is **non-black** and shows the Cloud Spiral N-panel and the generated mesh (the test-only startup Cube is hidden).
+- `xdotool` Ctrl+Z changes generated-lobe count **1 -> 0**, and Ctrl+Shift+Z changes **0 -> 1**. This measures real X11 shortcut input, not just a mock `bpy.ops.ed.undo()` call.
+- JSON checks and the PNG screenshot are saved as [GitHub Actions GUI artifact](https://github.com/mibesamiti-png/cloud-spiral-cbdk-test/actions/runs/42506059041/artifacts/13627138845).
+
+The first GUI trials failed for important reasons: the native Blender screenshot operator produced a **completely black PNG**, direct `bpy.ops.ed.undo()` failed its `poll()` in a Python timer context, and the startup Quick Setup overlay intercepted X11 keyboard events. Adding openbox, external scrot capture with pixel checks, and dismissal of the startup modal yielded a fully passing native GUI test.
+
+**Visual assessment:** The screenshot shows a shallow, carved, circular spiral lobe, **not a fluffy volumetric cloud**. Do not claim artistic quality was validated. Manual Windows Blender 4.4.3 verification, Windows font/layout, direct mouse click feel, self-intersections and 3D print suitability remain unverified. The reported 5/5 CI success does **not** imply those conditions are satisfied.
+
+**MVP accounting:** CLD-04 `検証待ち` / estimated **98%** due to pending Windows acceptance; CLD-01, 02, 03, 05 complete; **4/5=80%** fully completed stages. Existing Release Candidate remains v0.3.1, without source geometry edits in this GUI testing pass.
+
+[Notion detailed GUI evidence and handoff](https://app.notion.com/p/412948b74937810586ecea123543c4fc).
