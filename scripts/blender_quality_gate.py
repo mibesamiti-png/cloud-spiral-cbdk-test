@@ -177,8 +177,16 @@ def main():
                 return original_creator(*args, **kwargs)
 
             addon.create_lobe_mesh = fail_during_second_lobe
+            error_report = None
             try:
-                result = bpy.ops.mesh.cloud_spiral_generate()
+                try:
+                    result = bpy.ops.mesh.cloud_spiral_generate()
+                except RuntimeError as exc:
+                    # Blender's Python operator wrapper raises when a cancelled
+                    # operator reports ERROR, even though execute returned CANCELLED.
+                    error_report = str(exc)
+                    assert "injected-failure-after-first-mesh" in error_report, error_report
+                    result = {"CANCELLED"}
             finally:
                 addon.create_lobe_mesh = original_creator
 
@@ -191,6 +199,7 @@ def main():
             assert bpy.context.view_layer.objects.active == preserved
             return {
                 "operator_result": list(result),
+                "python_api_raised_error_report": error_report is not None,
                 "injected_after_mesh": 1,
                 "objects_preserved": len(original_obj_pointers),
                 "meshes_preserved": len(original_mesh_pointers),
