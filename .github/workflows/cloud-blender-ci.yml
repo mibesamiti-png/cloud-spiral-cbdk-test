@@ -1,0 +1,121 @@
+name: Cloud Spiral v0.3 | Native Blender and CBDK
+
+"on":
+  push:
+    branches:
+      - test/cloud-v03-blender-native
+    paths:
+      - 'addon/**'
+      - 'scripts/**'
+      - '.github/workflows/cloud-blender-ci.yml'
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cloud-native-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  cbdk-static:
+    name: CBDK AST and Blender API audit
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout private cloud experiment
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Read-only fetch of reference CBDK revision
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone --quiet --depth 1 --branch feature/v0.18-shape-diagnostics https://github.com/mibesamiti-png/Chappy-Blender-DevKit.git /tmp/cbdk-reference
+          git -C /tmp/cbdk-reference fetch --quiet --depth 1 origin 8665a3c136ae81efbd28a820e7de50ef6ee59332
+          git -C /tmp/cbdk-reference checkout --quiet --detach 8665a3c136ae81efbd28a820e7de50ef6ee59332
+          test "$(git -C /tmp/cbdk-reference rev-parse HEAD)" = "8665a3c136ae81efbd28a820e7de50ef6ee59332"
+      - name: Run actual CBDK parser and audit
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p evidence/static
+          python scripts/cbdk_static.py /tmp/cbdk-reference addon/cloud_spiral_lobe_builder_v03.py evidence/static 2>&1 | tee evidence/static/cbdk.log
+      - name: Package installable addon
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          from zipfile import ZipFile, ZIP_DEFLATED
+          target=Path('evidence/static/Cloud_Spiral_Lobe_Builder_v0.3.zip')
+          source=Path('addon/cloud_spiral_lobe_builder_v03.py')
+          with ZipFile(target,'w',ZIP_DEFLATED) as z:
+              z.write(source,arcname=source.name)
+          assert target.is_file() and target.stat().st_size>1000
+          print('CLOUD_ADDON_PACKAGE: PASS', target)
+          PY
+      - name: Upload static report and installer
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cloud-static-and-addon-${{ github.run_id }}
+          path: evidence/static/
+          if-no-files-found: warn
+          retention-days: 30
+
+  blender-native:
+    name: Blender ${{ matrix.blender-version }} native
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        blender-version: ['4.4.3', '4.5.15', '5.2.1']
+    env:
+      BLENDER_VERSION: ${{ matrix.blender-version }}
+      LIBGL_ALWAYS_SOFTWARE: '1'
+    steps:
+      - name: Checkout private cloud experiment
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install headless graphics dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libegl1 libgl1
+      - name: Download Blender and verify official checksum
+        shell: bash
+        run: |
+          set -euo pipefail
+          base="https://download.blender.org/release/Blender${BLENDER_VERSION%.*}"
+          archive="blender-${BLENDER_VERSION}-linux-x64.tar.xz"
+          curl --fail --location --retry 4 --retry-delay 3 --connect-timeout 30 "${base}/blender-${BLENDER_VERSION}.sha256" -o blender.sha256
+          curl --fail --location --retry 4 --retry-delay 3 --connect-timeout 30 "${base}/${archive}" -o "${archive}"
+          grep -F "${archive}" blender.sha256 | sha256sum --check --status
+          tar -xJf "${archive}"
+          echo "BLENDER_PATH=$PWD/blender-${BLENDER_VERSION}-linux-x64/blender" >> "$GITHUB_ENV"
+      - name: Execute real Blender API and geometry smoke checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "evidence/blender-${BLENDER_VERSION}"
+          "$BLENDER_PATH" --version | head -n 3
+          "$BLENDER_PATH" --background --factory-startup --python-exit-code 1 --python scripts/native_smoke.py -- addon/cloud_spiral_lobe_builder_v03.py "evidence/blender-${BLENDER_VERSION}" 2>&1 | tee "evidence/blender-${BLENDER_VERSION}/blender_ci.log"
+          grep -F 'CLOUD_REAL_BLENDER: PASS' "evidence/blender-${BLENDER_VERSION}/blender_ci.log"
+      - name: Upload Blender reports even on failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cloud-blender-${{ matrix.blender-version }}-${{ github.run_id }}
+          path: evidence/blender-${{ matrix.blender-version }}/
+          if-no-files-found: warn
+          retention-days: 30
