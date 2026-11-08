@@ -155,11 +155,21 @@ def tick():
                     "preset": "SOFT", "before": before, "after": after,
                     "operator_invoked_in_VIEW_3D": True,
                 })
-                # Put keyboard focus back on the viewport before Ctrl+Z.
-                subprocess.run(["xdotool", "mousemove", "--sync", "1030", "540"], check=True, timeout=10)
+                # Hide Blender's startup cube only in this disposable GUI
+                # test scene so the generated cloud is actually visible.
+                cube = bpy.data.objects.get("Cube")
+                if cube is not None:
+                    cube.hide_set(True)
+                # Aim the actual viewport at the lobe.
+                area.spaces.active.region_3d.view_location = (0.0, 0.0, 0.0)
+                area.spaces.active.region_3d.view_distance = 4.5
+                # Activate the N-sidebar Cloud Spiral tab after startup and
+                # all modals are dismissed. This tab occupies x=1309,y=245..325
+                # in the fixed 1600x900 Blender 4.4.3 test window.
+                subprocess.run(["xdotool", "mousemove", "--sync", "1309", "300"], check=True, timeout=10)
                 subprocess.run(["xdotool", "click", "1"], check=True, timeout=10)
                 STATE["phase"] = 2
-                return 0.8
+                return 1.0
 
             if STATE["phase"] == 2:
                 image = OUT / "blender_window.png"
@@ -181,6 +191,10 @@ def tick():
                     "name": image.name, "size_bytes": image.stat().st_size,
                     "non_black_verified": True, "source": "X11 framebuffer via scrot",
                 })
+                # Switch keyboard focus to the 3D view without changing
+                # which sidebar tab is visible in the captured screenshot.
+                subprocess.run(["xdotool", "mousemove", "--sync", "1015", "536"], check=True, timeout=10)
+                subprocess.run(["xdotool", "click", "1"], check=True, timeout=10)
                 STATE["phase"] = 3
                 return 0.5
 
