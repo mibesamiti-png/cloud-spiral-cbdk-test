@@ -128,3 +128,67 @@ jobs:
           path: evidence/blender-${{ matrix.blender-version }}/
           if-no-files-found: warn
           retention-days: 30
+
+
+  blender-gui-xvfb:
+    name: Blender 4.4.3 virtual GUI / N-panel / Undo-Redo
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      BLENDER_VERSION: '4.4.3'
+      LIBGL_ALWAYS_SOFTWARE: '1'
+    steps:
+      - name: Checkout experimental source
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install virtual-display graphics libraries
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends xvfb xauth libegl1 libgl1 libxkbcommon-x11-0 libxrender1
+      - name: Download official Blender release with hash verification
+        shell: bash
+        run: |
+          set -euo pipefail
+          base="https://download.blender.org/release/Blender${BLENDER_VERSION%.*}"
+          archive="blender-${BLENDER_VERSION}-linux-x64.tar.xz"
+          curl --fail --location --retry 4 --retry-delay 3 --connect-timeout 30 "${base}/blender-${BLENDER_VERSION}.sha256" -o blender.sha256
+          curl --fail --location --retry 4 --retry-delay 3 --connect-timeout 30 "${base}/${archive}" -o "${archive}"
+          grep -F "${archive}" blender.sha256 | sha256sum --check --status
+          tar -xJf "${archive}"
+          echo "BLENDER_PATH=$PWD/blender-${BLENDER_VERSION}-linux-x64/blender" >> "$GITHUB_ENV"
+      - name: Run real graphical Blender using Xvfb
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p evidence/gui
+          xvfb-run --auto-servernum --server-args="-screen 0 1600x900x24" \
+            timeout --signal=TERM 150s "$BLENDER_PATH" --factory-startup \
+            --python-exit-code 1 --python scripts/gui_smoke.py -- \
+            addon/cloud_spiral_lobe_builder_v031.py evidence/gui \
+            2>&1 | tee evidence/gui/gui.log
+          grep -F 'CLOUD_GUI_REAL_BLENDER: PASS' evidence/gui/gui.log
+          python3 - <<'PY'
+          from pathlib import Path
+          import json
+          report=json.loads(Path('evidence/gui/gui_report.json').read_text(encoding='utf-8'))
+          assert report['status']=='PASS',report
+          assert report['background'] is False,report
+          names={check['name'] for check in report['checks'] if check['status']=='PASS'}
+          required={'real_gui_window_and_N_sidebar','gui_context_preset_and_generate',
+                    'real_gui_screenshot','real_gui_undo','real_gui_redo'}
+          assert required.issubset(names),(required-names,report)
+          png=Path('evidence/gui/blender_window.png')
+          assert png.read_bytes()[:8]==b'\x89PNG\r\n\x1a\n'
+          print('CLOUD_GUI_ARTIFACT_VERIFIED',png.stat().st_size)
+          PY
+      - name: Keep GUI screenshots, report and failure logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cloud-gui-xvfb-${{ github.run_id }}
+          path: evidence/gui/
+          if-no-files-found: warn
+          retention-days: 30
