@@ -120,13 +120,25 @@ def tick():
                 "screen": window.screen.name,
             })
             STATE["registered"] = True
+            # On factory-startup Blender 4.4.3 shows a first-run Quick Setup
+            # modal overlay (as proved by the initial real screenshot).
+            # Acknowledge "Continue" on the fixed 1600x900 Xvfb desktop,
+            # then dismiss the subsequent splash with Escape.
+            subprocess.run(["xdotool", "mousemove", "--sync", "798", "666"], check=True, timeout=10)
+            subprocess.run(["xdotool", "click", "1"], check=True, timeout=10)
+            subprocess.run(["xdotool", "key", "--clearmodifiers", "Escape"], check=True, timeout=10)
+            record("dismiss_first_run_overlay", {"method": "X11 mouse and Escape"})
             STATE["phase"] = 1
-            return 0.5
+            return 1.0
 
         window, area, region = STATE["window"], STATE["area"], STATE["region"]
         with bpy.context.temp_override(window=window, screen=window.screen,
                                        area=area, region=region):
             if STATE["phase"] == 1:
+                # Activate the Cloud Spiral sidebar tab, then focus the 3D view.
+                subprocess.run(["xdotool", "key", "--clearmodifiers", "Escape"], check=True, timeout=10)
+                subprocess.run(["xdotool", "mousemove", "--sync", "1308", "273"], check=True, timeout=10)
+                subprocess.run(["xdotool", "click", "1"], check=True, timeout=10)
                 settings = bpy.context.scene.cloud_spiral_settings
                 settings.mode = "SINGLE"
                 before = lobe_count()
@@ -143,6 +155,9 @@ def tick():
                     "preset": "SOFT", "before": before, "after": after,
                     "operator_invoked_in_VIEW_3D": True,
                 })
+                # Put keyboard focus back on the viewport before Ctrl+Z.
+                subprocess.run(["xdotool", "mousemove", "--sync", "1030", "540"], check=True, timeout=10)
+                subprocess.run(["xdotool", "click", "1"], check=True, timeout=10)
                 STATE["phase"] = 2
                 return 0.8
 
