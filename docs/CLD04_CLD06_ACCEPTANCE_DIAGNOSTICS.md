@@ -65,9 +65,9 @@ If these are not confirmed, **do not mark CLD-04 at 100%**. The extra CLD-06 des
 
 ## Cross references
 
-- [CLD-04/05 existing handoff](docs/CLD04_CLD05_RESULTS.md)
-- [CLD-06 v0.4 notes](docs/CLD06_V04_RESULTS.md)
-- [Completion stop rule and CBDK lessons](docs/COMPLETION_GATE_AND_CBDK_LESSONS.md)
+- [CLD-04/05 existing handoff](CLD04_CLD05_RESULTS.md)
+- [CLD-06 v0.4 notes](CLD06_V04_RESULTS.md)
+- [Completion stop rule and CBDK lessons](COMPLETION_GATE_AND_CBDK_LESSONS.md)
 - [Notion original roadmap](https://app.notion.com/p/412948b7493781d092b2eb7dc2f1e048)
 - [Notion CLD-06 stage](https://app.notion.com/p/413948b749378104a06ac74679c8b9dd)
 
