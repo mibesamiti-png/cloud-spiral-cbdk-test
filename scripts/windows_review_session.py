@@ -4,9 +4,8 @@ Launch via run_windows_review.bat, or use --smoke under CI's real Blender.
 The addon itself is NOT modified. A separate temporary scene is built with
 --factory-startup. Human GUI acceptance remains explicitly manual.
 """
-from __future__ import annotations
-
 import hashlib
+import os
 import importlib.util
 import json
 import sys
@@ -271,7 +270,11 @@ def initialize():
             }, indent=2, ensure_ascii=False), encoding="utf-8"
         )
         print("CLOUD_WINDOWS_REVIEW_GUI_SMOKE: PASS", flush=True)
-        bpy.ops.wm.quit_blender()
+        # The temporary CI Blender process may have a first-run modal. Once
+        # JSON is written and stdout is flushed, exit without a UI save prompt.
+        sys.stdout.flush()
+        sys.stderr.flush()
+        os._exit(0)
     else:
         configure_window()
         print("CLOUD_WINDOWS_REVIEW_KIT_READY: 4 cloud objects. Open N > Cloud QA.", flush=True)
@@ -296,6 +299,12 @@ else:
             (OUTPUT/"review_startup_error.txt").write_text(
                 details, encoding="utf-8"
             )
+            if GUI_SMOKE:
+                # Fail fast in CI rather than letting Blender sit at its modal
+                # first-run window until timeout kills the process.
+                sys.stdout.flush()
+                sys.stderr.flush()
+                os._exit(1)
         return None
 
     bpy.app.timers.register(start_when_window_ready, first_interval=1.0)
