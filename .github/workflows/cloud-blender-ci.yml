@@ -321,6 +321,35 @@ jobs:
           Compress-Archive -Path "$root/*" -DestinationPath $zip -CompressionLevel Optimal -Force
           if ((Get-Item $zip).Length -lt 1000) { throw "Review kit ZIP unexpectedly empty" }
           Write-Host "CLOUD_WINDOWS_REVIEW_KIT_ZIP: $zip"
+      - name: Rehearse the actual zipped distribution on Windows Blender
+        shell: pwsh
+        run: |
+          $archive = 'evidence/windows-4.4.3/Cloud_Spiral_Windows_Review_Kit.zip'
+          $unpacked = 'evidence/windows-4.4.3/packaged-kit-verification'
+          Expand-Archive -Path $archive -DestinationPath $unpacked -Force
+          $paths = @(
+            'run_windows_review.bat',
+            'WINDOWS_REVIEW_README.md',
+            'addon/cloud_spiral_lobe_builder_v04.py',
+            'scripts/windows_review_session.py'
+          )
+          foreach ($rel in $paths) {
+            $actual = Join-Path $unpacked $rel
+            if (-not (Test-Path $actual -PathType Leaf)) {
+              throw "Distributed Windows ZIP is missing: $rel"
+            }
+            $original = Join-Path 'evidence/windows-4.4.3/review-kit' $rel
+            if ((Get-FileHash $actual -Algorithm SHA256).Hash -ne (Get-FileHash $original -Algorithm SHA256).Hash) {
+              throw "Distributed file does not match staged copy: $rel"
+            }
+          }
+          & $env:BLENDER_PATH --background --factory-startup --python-exit-code 1 --python "$unpacked/scripts/windows_review_session.py" -- "$unpacked/addon/cloud_spiral_lobe_builder_v04.py" "$unpacked/qa-output" --smoke 2>&1 | Tee-Object -FilePath evidence/windows-4.4.3/review_package_smoke.log
+          if ($LASTEXITCODE -ne 0) { throw "Unpacked review kit fails Blender smoke: $LASTEXITCODE" }
+          if (-not (Select-String -Path evidence/windows-4.4.3/review_package_smoke.log -Pattern 'CLOUD_WINDOWS_REVIEW_KIT_SMOKE: PASS' -SimpleMatch)) { throw "Packaged source success marker missing" }
+          $report = Get-Content -Raw -Encoding utf8 "$unpacked/qa-output/windows_review_kit_smoke.json" | ConvertFrom-Json
+          if ($report.generated.total_sample_objects -ne 4) { throw 'Packaged kit did not prepare four cloud objects' }
+          if ($report.review.stage_CLD04 -ne 'INCOMPLETE' -or $report.review.stage_CLD06 -ne 'INCOMPLETE') { throw 'Packaged kit unexpectedly marks acceptance as completed' }
+          Write-Host 'CLOUD_PACKAGED_WINDOWS_KIT_SMOKE: PASS'
       - name: Validate Windows JSON evidence contains all mandatory passes
         shell: pwsh
         run: |
@@ -348,7 +377,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: cloud-windows-review-kit-${{ github.run_id }}
-          path: evidence/windows-4.4.3/Cloud_Spiral_Windows_Review_Kit.zip
+          # GitHub automatically wraps an artifact in a ZIP. Upload this
+          # folder so the user only needs to unzip ONCE to run the BAT.
+          path: evidence/windows-4.4.3/review-kit/
           if-no-files-found: error
           retention-days: 30
       - name: Keep Windows native logs and generated test scene
