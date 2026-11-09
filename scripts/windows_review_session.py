@@ -24,19 +24,20 @@ def args():
         raise ValueError("Missing -- ADDON OUTPUT [--smoke] arguments")
     parts = sys.argv[sys.argv.index("--") + 1:]
     if len(parts) not in (2, 3):
-        raise ValueError("Expected ADDON OUTPUT [--smoke]")
+        raise ValueError("Expected ADDON OUTPUT [--smoke|--gui-smoke]")
     source = Path(parts[0]).resolve()
     output = Path(parts[1]).resolve()
     smoke = len(parts) == 3 and parts[2] == "--smoke"
-    if len(parts) == 3 and not smoke:
+    gui_smoke = len(parts) == 3 and parts[2] == "--gui-smoke"
+    if len(parts) == 3 and not (smoke or gui_smoke):
         raise ValueError("Unknown argument: " + parts[2])
     if not source.is_file():
         raise FileNotFoundError("Cloud Spiral addon source not found: " + str(source))
     output.mkdir(parents=True, exist_ok=True)
-    return source, output, smoke
+    return source, output, smoke, gui_smoke
 
 
-SOURCE, OUTPUT, SMOKE = args()
+SOURCE, OUTPUT, SMOKE, GUI_SMOKE = args()
 REGISTERED_ADDON = None
 QA_CLASSES_REGISTERED = False
 
@@ -253,6 +254,24 @@ def initialize():
                        indent=2, ensure_ascii=False), encoding="utf-8"
         )
         print("CLOUD_WINDOWS_REVIEW_KIT_SMOKE: PASS", flush=True)
+    elif GUI_SMOKE:
+        assert not bpy.app.background, "GUI smoke was run with --background"
+        assert configure_window(), "No VIEW_3D graphical window was available"
+        assert hasattr(bpy.types, "VIEW3D_PT_cloud_review")
+        assert all(v == "NOT_TESTED" for v in statuses(bpy.context.scene).values())
+        (OUTPUT / "windows_review_gui_smoke.json").write_text(
+            json.dumps({
+                "status": "PASS",
+                "gui_window_available": True,
+                "Cloud_QA_panel_registered": True,
+                "generated": generated,
+                "stage_CLD04": "INCOMPLETE",
+                "stage_CLD06": "INCOMPLETE",
+                "real_windows_mouse_clicks": "NOT_TESTED",
+            }, indent=2, ensure_ascii=False), encoding="utf-8"
+        )
+        print("CLOUD_WINDOWS_REVIEW_GUI_SMOKE: PASS", flush=True)
+        bpy.ops.wm.quit_blender()
     else:
         configure_window()
         print("CLOUD_WINDOWS_REVIEW_KIT_READY: 4 cloud objects. Open N > Cloud QA.", flush=True)
