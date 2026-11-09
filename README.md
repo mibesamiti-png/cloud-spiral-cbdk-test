@@ -1,6 +1,6 @@
 # Cloud Spiral × CBDK — v0.4 ふっくら雲ローブ実験
 
-**最新版：Cloud Spiral Lobe Builder v0.4（Linux 3版＋Windows 4.4.3＋Linux画面付きGUIのCI合格。Windowsの人による最終受入は未実施）**
+**当初MVP（CLD-01〜05）は2026-11-09に5/5工程＝100%完了！** WindowsのNパネル生成・Ctrl+Z/Redoの正常動作はユーザー本人が報告。Linux3版＋Windows 4.4.3＋Linux画面付きGUIのCIも合格。**後続v0.4 CLD-06は造形品質に課題が残り90%（別枠）。**
 
 > このGitHubリポジトリは **Public**。個人データ・非公開の3D素材を追加しないこと。変更はドラフトPR #1に保持し、mainには統合していない。
 
@@ -11,7 +11,7 @@
 GitHubから取得したZIPを**一度だけ**展開して`run_windows_review.bat`を開くと、Blenderの**新しいテスト用シーン**に単体1個と3ローブ3個を自動準備します。`N`キーから`Cloud Spiral`で既存機能を操作し、`Cloud QA`で「合格・不具合・未確認」を項目別に記録できます。結果はローカルの`qa-output/cloud_review_*.json`に保存され、**送信は自動では行いません**。
 
 - 4項目のWindows操作検証（CLD-04）と2項目の造形評価（CLD-06）を**独立して判定**。すべて明示的に合格するまで未完了。
-- Windows実Blender 4.4.3で配布物を展開して再テストし、レポートの連続書き出し・上書き防止・合否判定とLinux XvfbのCloud QAパネル起動スモークをCIで確認済み。ただし**人の実Windowsクリックと造形の評価は未確認**。
+- Windows実Blender 4.4.3で配布物を展開して再テストし、レポートの連続書き出し・上書き防止・合否判定とLinux XvfbのCloud QAパネル起動スモークをCIで確認済み。ユーザー本人はWindowsでの生成・Undo/Redoを正常と報告。**Cloud QAの実レポートJSON・画面録画は未提出で、自然な雲らしさは低評価**。
 - 既存の`.blend`ファイルは上書きしません。使用方法と確認項目は[日本語README](WINDOWS_REVIEW_README.md)。
 - バージョンや個人メモは結果JSONに含まれるため、**共有前に内容を確認**してください。
 
@@ -42,7 +42,7 @@ GitHubから取得したZIPを**一度だけ**展開して`run_windows_review.ba
 - `.github/workflows/cloud-blender-ci.yml`：Blender 4.4.3/4.5.15/5.2.1 + Linux GUI + CBDK解析。
 
 ## 検証の限界
-- 6/6のCI成功は**技術的な動作確認**。Windowsでのマウス操作感、理想の雲造形、複数ローブの一体化、自己交差と3Dプリント適性の保証ではない。
+- 6/6のCI成功は**技術的な動作確認**。ユーザーのWindows操作確認報告は別途得られたが、理想の雲造形、複数ローブの一体化、すべての形状条件や3Dプリント適性の保証ではない。
 - 現在のシルエットは「**厚みのある渦彫りの丸いローブ**」。リアルな積雲の塊が融合した見た目は次の改善対象。
 - このレポジトリはPublic。Actions artifactsも閲覧・保持期限あり（約30日）。
 - 実作業総時間およびCBDKの効率化時間は測定していないため、短縮率は主張しない。
@@ -53,4 +53,5 @@ GitHubから取得したZIPを**一度だけ**展開して`run_windows_review.ba
 - **現在のロードマップが受入基準を満たして100%になったら、追加開発を止めて完了を案内する。** 次に「続けてー」と来ても、新しい版や工程を勝手に作らず「今回のロードマップは100%完了しているよー！」と伝える。
 - 完了時は苦労・失敗・対処・次回の改善手順・CBDKへ転用する候補・実測証拠を最終レポートに追記する。
 - [100%停止ルールとCBDK向けノウハウ](docs/COMPLETION_GATE_AND_CBDK_LESSONS.md) / [CBDK Notionの引き継ぎページ](https://app.notion.com/p/413948b7493781f68756d61534df149b)。
-- 原MVPはCLD-01〜05の4/5=80%。CLD-04のWindows受入は未完了。CLD-06は別計画（90%）。数字の書き換えだけで100%にしない。
+- **原MVPはCLD-01〜05の5/5=100%、CLD-04のWindowsユーザー受入も完了。** 造形の美観についてはユーザーが不満を示したため、CLD-06は別計画（90%）として未完了のまま。新バージョンを勝手に始めない。
+- [MVP完了の最終振り返りとCBDKノウハウ](docs/CLD01_05_MVP_FINAL_RETROSPECTIVE.md) / [Notionの100%完了記録](https://app.notion.com/p/413948b749378151b5d9dd3e1e0c0563)。
