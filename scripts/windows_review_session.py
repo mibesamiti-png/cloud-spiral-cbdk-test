@@ -114,8 +114,18 @@ class CLOUDQA_OT_export(Operator):
     bl_options = {"REGISTER"}
 
     def execute(self, context):
-        timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
         destination = OUTPUT / ("cloud_review_" + timestamp + ".json")
+        # Preserve each user observation, even after repeated clicks.
+        if destination.exists():
+            for suffix in range(1, 1001):
+                candidate = OUTPUT / ("cloud_review_" + timestamp + "_" + str(suffix) + ".json")
+                if not candidate.exists():
+                    destination = candidate
+                    break
+            else:
+                self.report({"ERROR"}, "レポート保存名が重複しています")
+                return {"CANCELLED"}
         report = build_report(context.scene)
         try:
             destination.write_text(
@@ -255,12 +265,19 @@ def initialize():
         assert bpy.ops.cloud_qa.export_review() == {"FINISHED"}
         added = set(OUTPUT.glob("cloud_review_*.json")) - before
         assert len(added) == 1, ("Report export did not create one JSON", added)
-        test_report = json.loads(next(iter(added)).read_text(encoding="utf-8"))
+        first_path = next(iter(added))
+        test_report = json.loads(first_path.read_text(encoding="utf-8"))
         assert test_report["stage_CLD04"] == "INCOMPLETE"
         assert test_report["stage_CLD06"] == "INCOMPLETE"
         assert all(v["answer"] == "NOT_TESTED" for v in test_report["answers"].values())
-        for report_file in added:
-            report_file.unlink()  # Never ship a synthetic manual-acceptance JSON.
+        assert bpy.ops.cloud_qa.export_review() == {"FINISHED"}
+        twice = set(OUTPUT.glob("cloud_review_*.json")) - before
+        assert len(twice) == 2, "Rapid repeated export overwrote earlier report"
+        assert first_path.read_text(encoding="utf-8") == json.dumps(
+            test_report, indent=2, ensure_ascii=False
+        )
+        for report_file in twice:
+            report_file.unlink()  # Never ship synthetic manual-acceptance JSON.
 
         # Confirm a FAIL cannot be mislabeled accepted, and all manual PASS
         # answers are necessary before a stage reports ACCEPTED.
