@@ -1,8 +1,19 @@
 # Cloud Spiral × CBDK — v0.4 ふっくら雲ローブ実験
 
-**最新版：Cloud Spiral Lobe Builder v0.4（実Blender 3版＋Linux GUIのCI合格、Windowsの最終受入は未実施）**
+**最新版：Cloud Spiral Lobe Builder v0.4（Linux 3版＋Windows 4.4.3＋Linux画面付きGUIのCI合格。Windowsの人による最終受入は未実施）**
 
 > このGitHubリポジトリは **Public**。個人データ・非公開の3D素材を追加しないこと。変更はドラフトPR #1に保持し、mainには統合していない。
+
+## Windowsの操作・見た目の最終確認キット
+
+**[ワンクリック確認キットZIP（2026-11-09の全6ジョブ成功版）](https://github.com/mibesamiti-png/cloud-spiral-cbdk-test/actions/runs/42545843598/artifacts/13643057294)**
+
+ZIPを展開して`run_windows_review.bat`を開くと、Blenderの**新しいテスト用シーン**に単体1個と3ローブ3個を自動準備します。`N`キーから`Cloud Spiral`で既存機能を操作し、`Cloud QA`で「合格・不具合・未確認」を項目別に記録できます。結果はローカルの`qa-output/cloud_review_*.json`に保存され、**送信は自動では行いません**。
+
+- 4項目のWindows操作検証（CLD-04）と2項目の造形評価（CLD-06）を**独立して判定**。すべて明示的に合格するまで未完了。
+- Windows実Blender 4.4.3のセットアップ・レポート書き出し・合否判定とLinux XvfbのCloud QAパネル起動スモークをCIで確認済み。ただし**人の実Windowsクリックと造形の評価は未確認**。
+- 既存の`.blend`ファイルは上書きしません。使用方法と確認項目は[日本語README](WINDOWS_REVIEW_README.md)。
+- バージョンや個人メモは結果JSONに含まれるため、**共有前に内容を確認**してください。
 
 ## ダウンロードと使用方法
 - [GitHub Actions v0.4 成功実行](https://github.com/mibesamiti-png/cloud-spiral-cbdk-test/actions/runs/42539777746)
