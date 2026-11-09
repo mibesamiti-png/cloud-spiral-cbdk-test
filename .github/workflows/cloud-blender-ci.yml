@@ -211,6 +211,7 @@ jobs:
     timeout-minutes: 25
     env:
       BLENDER_VERSION: '4.4.3'
+      CLOUD_SKIP_RENDER: '1'
     steps:
       - name: Checkout source without persisting credentials
         uses: actions/checkout@v4
