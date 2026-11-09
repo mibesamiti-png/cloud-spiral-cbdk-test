@@ -130,6 +130,15 @@ jobs:
             "evidence/blender-${BLENDER_VERSION}" \
             2>&1 | tee "evidence/blender-${BLENDER_VERSION}/puffy_geometry.log"
           grep -F 'CLOUD_PUFF_NATIVE: PASS' "evidence/blender-${BLENDER_VERSION}/puffy_geometry.log"
+      - name: Verify real Blender N-panel control matrix and BVH shape diagnostics
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$BLENDER_PATH" --background --factory-startup --python-exit-code 1 \
+            --python scripts/acceptance_diagnostics.py -- \
+            addon/cloud_spiral_lobe_builder_v04.py "evidence/blender-${BLENDER_VERSION}" \
+            2>&1 | tee "evidence/blender-${BLENDER_VERSION}/acceptance_diagnostics.log"
+          grep -F 'CLOUD_ACCEPTANCE_DIAGNOSTICS: PASS' "evidence/blender-${BLENDER_VERSION}/acceptance_diagnostics.log"
       - name: Upload Blender reports even on failure
         if: always()
         uses: actions/upload-artifact@v4
@@ -259,11 +268,17 @@ jobs:
           & $env:BLENDER_PATH --background --factory-startup --python-exit-code 1 --python scripts/puffy_geometry_compare.py -- addon/cloud_spiral_lobe_builder_v031.py addon/cloud_spiral_lobe_builder_v04.py evidence/windows-4.4.3 2>&1 | Tee-Object -FilePath evidence/windows-4.4.3/puffy_geometry.log
           if ($LASTEXITCODE -ne 0) { throw "Windows old/new mesh comparison failed: exit $LASTEXITCODE" }
           if (-not (Select-String -Path evidence/windows-4.4.3/puffy_geometry.log -Pattern 'CLOUD_PUFF_NATIVE: PASS' -SimpleMatch)) { throw "Windows geometry comparison success marker missing" }
+      - name: Validate N-panel branches and shape intersections in real Windows Blender
+        shell: pwsh
+        run: |
+          & $env:BLENDER_PATH --background --factory-startup --python-exit-code 1 --python scripts/acceptance_diagnostics.py -- addon/cloud_spiral_lobe_builder_v04.py evidence/windows-4.4.3 2>&1 | Tee-Object -FilePath evidence/windows-4.4.3/acceptance_diagnostics.log
+          if ($LASTEXITCODE -ne 0) { throw "Windows UI/BVH diagnostic failure: exit $LASTEXITCODE" }
+          if (-not (Select-String -Path evidence/windows-4.4.3/acceptance_diagnostics.log -Pattern 'CLOUD_ACCEPTANCE_DIAGNOSTICS: PASS' -SimpleMatch)) { throw "Windows UI/BVH success marker missing" }
       - name: Validate Windows JSON evidence contains all mandatory passes
         shell: pwsh
         run: |
           $root = "evidence/windows-4.4.3"
-          $reports = @("native_report.json", "quality_report.json", "puffy_geometry_report.json")
+          $reports = @("native_report.json", "quality_report.json", "puffy_geometry_report.json", "acceptance_diagnostics.json")
           foreach ($file in $reports) {
             $path = Join-Path $root $file
             if (-not (Test-Path $path)) { throw "Required report missing: $path" }
@@ -276,6 +291,9 @@ jobs:
           if ($native.checks.Count -lt 12) { throw "Too few Windows native checks" }
           if ($quality.checks.Count -lt 9) { throw "Too few Windows quality checks" }
           if ($geometry.checks.Count -lt 5) { throw "Too few Windows geometry checks" }
+          $acceptance = Get-Content -Raw -Encoding utf8 (Join-Path $root "acceptance_diagnostics.json") | ConvertFrom-Json
+          if ($acceptance.panel_checks.Count -lt 6) { throw "Too few Windows N-panel mode cases" }
+          if (@($acceptance.panel_checks | Where-Object { $_.status -ne "PASS" }).Count -gt 0) { throw "Windows panel controls failed" }
           $failed = @($native.checks; $quality.checks; $geometry.checks) | Where-Object { $_.status -ne "PASS" }
           if ($failed.Count -gt 0) { throw "Some Windows checks were not PASS" }
           Write-Host "CLOUD_WINDOWS_REAL_BLENDER_ALL_GATES: PASS"
