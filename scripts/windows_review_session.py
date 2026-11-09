@@ -248,6 +248,35 @@ def initialize():
         assert first["stage_CLD04"] == "INCOMPLETE"
         assert first["stage_CLD06"] == "INCOMPLETE"
         assert all(v["answer"] == "NOT_TESTED" for v in first["answers"].values())
+
+        # Exercise the actual Report Export operator without treating this
+        # automated smoke as the user's real Windows GUI acceptance.
+        before = set(OUTPUT.glob("cloud_review_*.json"))
+        assert bpy.ops.cloud_qa.export_review() == {"FINISHED"}
+        added = set(OUTPUT.glob("cloud_review_*.json")) - before
+        assert len(added) == 1, ("Report export did not create one JSON", added)
+        test_report = json.loads(next(iter(added)).read_text(encoding="utf-8"))
+        assert test_report["stage_CLD04"] == "INCOMPLETE"
+        assert test_report["stage_CLD06"] == "INCOMPLETE"
+        assert all(v["answer"] == "NOT_TESTED" for v in test_report["answers"].values())
+        for report_file in added:
+            report_file.unlink()  # Never ship a synthetic manual-acceptance JSON.
+
+        # Confirm a FAIL cannot be mislabeled accepted, and all manual PASS
+        # answers are necessary before a stage reports ACCEPTED.
+        values = bpy.context.scene.cloud_qa_review
+        values.panel = "FAIL"
+        assert build_report(bpy.context.scene)["stage_CLD04"] == "REJECTED"
+        values.panel = "PASS"
+        assert build_report(bpy.context.scene)["stage_CLD04"] == "INCOMPLETE"
+        for key in ("generate", "presets", "undo"):
+            setattr(values, key, "PASS")
+        assert build_report(bpy.context.scene)["stage_CLD04"] == "ACCEPTED"
+        assert build_report(bpy.context.scene)["stage_CLD06"] == "INCOMPLETE"
+        for key, _, _ in QUESTIONS:
+            setattr(values, key, "NOT_TESTED")
+        assert build_report(bpy.context.scene)["stage_CLD04"] == "INCOMPLETE"
+
         (OUTPUT / "windows_review_kit_smoke.json").write_text(
             json.dumps({"status": "PASS", "generated": generated, "review": first},
                        indent=2, ensure_ascii=False), encoding="utf-8"
