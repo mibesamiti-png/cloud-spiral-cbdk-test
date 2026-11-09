@@ -282,7 +282,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: cloud-blender-windows-4.4.3-@{{ github.run_id }}
+          name: cloud-blender-windows-4.4.3-${{ github.run_id }}
           path: evidence/windows-4.4.3/
           if-no-files-found: warn
           retention-days: 30
