@@ -50,3 +50,20 @@
 - [Experiment draft PR #1](https://github.com/mibesamiti-png/cloud-spiral-cbdk-test/pull/1)
 
 **Status snapshot:** original MVP 80% formal completion (CLD-04 at 98%); optional subsequent CLD-06 is 90%. A future final retrospective must replace these as-of values with verified milestone acceptance evidence, not assumptions.
+
+
+## 2026-11-09 — Windows native Blender QA (new accepted evidence)
+
+**Goal:** Reduce CLD-04's Windows verification gap without opening the user's own Windows PC. No new roadmap feature is created here, and **completion remains below 100% until actual Windows interactive GUI acceptance**.
+
+- [Push CI #42542713024](https://github.com/mibesamiti-png/cloud-spiral-cbdk-test/actions/runs/42542713024), [draft-PR CI #42542720133](https://github.com/mibesamiti-png/cloud-spiral-cbdk-test/actions/runs/42542720133), tested SHA `1a24f90206bf49db41863e41f231ae1be3175c39`: **six of six jobs SUCCESS** in each workflow.
+- Added `windows-blender-native` on GitHub-hosted **Windows Server 2022** using an **official Blender 4.4.3 Windows x64 portable ZIP**. Official checksum manifest is downloaded and SHA-256 checked before extraction.
+- Windows real Blender logs confirm `CLOUD_REAL_BLENDER: PASS`, `CLOUD_REAL_BLENDER_QUALITY: PASS`, `CLOUD_PUFF_NATIVE: PASS`, and the aggregate `CLOUD_WINDOWS_REAL_BLENDER_ALL_GATES: PASS`.
+- Windows native smoke: **12 PASS** (registration, operator/panel classes, presets, single/three-lobe generation, modified parameters, topology and cleanup). Windows robustness: **9 recorded PASS**, including a check explicitly declaring interactive Undo **NOT_RUN**; not a Windows keyboard Undo success. Windows old/new comparison: **5 PASS** for exact CLASSIC compatibility, PUFFY height/volume, outline controls and rim roundness.
+- The Windows job independently validates all three JSON reports and uploads generated test scenes plus logs. [Windows real-Blender evidence artifact](https://github.com/mibesamiti-png/cloud-spiral-cbdk-test/actions/runs/42542713024/artifacts/13641948143).
+- Linux Blender 4.4.3/4.5.15/5.2.1 real native jobs, Linux Xvfb GUI screenshot and keyboard Undo/Redo, and CBDK AST/audit also passed in the same CI run.
+- **Important failure and lesson:** The first Windows runs crashed after all single/three-lobe geometry smoke tests, when a Workbench preview called OpenGL. The Windows GitHub runner had no OpenGL vendor (`No OpenGL vendor detected` and `EXCEPTION_ACCESS_VIOLATION`). This is a **runner graphics limitation** observed at rendering time, not evidence that generated meshes were invalid.
+- **Fix:** `CLOUD_SKIP_RENDER=1` is set only on the Windows CI job; `native_smoke.py` and `puffy_geometry_compare.py` record the omitted GPU preview explicitly while preserving all geometry, rollback and exact legacy compatibility assertions. Linux preview and real graphical GUI jobs still test rendering and screenshots; they are not skipped.
+- **CBDK reusable practice:** GPU-dependent preview must be separated from native geometry tests. Report `SKIPPED_NO_GPU` honestly and treat OS/runtime crashes independently from addon failures. Include Windows/CPU-only native validation alongside Linux GUI rendering rather than asking the user to troubleshoot a headless graphics runner.
+
+**Current acceptance:** CLD-04 remains `検証待ち` at its previously estimated 98%, pending Windows user-interactive N-panel and mouse/Undo feedback. CLD-06 remains 90% review pending (aesthetic result and shape/print suitability). The original MVP remains **4/5 = 80%** formally finished; neither milestone has reached 100%. Do not silently start another roadmap on a generic "続けてー" after completion.
