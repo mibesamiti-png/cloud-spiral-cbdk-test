@@ -1,4 +1,4 @@
-name: Cloud Spiral v0.3.1 | Native Blender and CBDK
+name: Cloud Spiral v0.4 | Native Blender and CBDK
 
 "on":
   push:
@@ -46,7 +46,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p evidence/static
-          python scripts/cbdk_static.py /tmp/cbdk-reference addon/cloud_spiral_lobe_builder_v031.py evidence/static 2>&1 | tee evidence/static/cbdk.log
+          python scripts/cbdk_static.py /tmp/cbdk-reference addon/cloud_spiral_lobe_builder_v04.py evidence/static 2>&1 | tee evidence/static/cbdk.log
       - name: Package installable addon
         shell: bash
         run: |
@@ -54,8 +54,8 @@ jobs:
           python - <<'PY'
           from pathlib import Path
           from zipfile import ZipFile, ZIP_DEFLATED
-          target=Path('evidence/static/Cloud_Spiral_Lobe_Builder_v0.3.1.zip')
-          source=Path('addon/cloud_spiral_lobe_builder_v031.py')
+          target=Path('evidence/static/Cloud_Spiral_Lobe_Builder_v0.4.zip')
+          source=Path('addon/cloud_spiral_lobe_builder_v04.py')
           with ZipFile(target,'w',ZIP_DEFLATED) as z:
               z.write(source,arcname=source.name)
           assert target.is_file() and target.stat().st_size>1000
@@ -109,7 +109,7 @@ jobs:
           set -euo pipefail
           mkdir -p "evidence/blender-${BLENDER_VERSION}"
           "$BLENDER_PATH" --version | head -n 3
-          "$BLENDER_PATH" --background --factory-startup --python-exit-code 1 --python scripts/native_smoke.py -- addon/cloud_spiral_lobe_builder_v031.py "evidence/blender-${BLENDER_VERSION}" 2>&1 | tee "evidence/blender-${BLENDER_VERSION}/blender_ci.log"
+          "$BLENDER_PATH" --background --factory-startup --python-exit-code 1 --python scripts/native_smoke.py -- addon/cloud_spiral_lobe_builder_v04.py "evidence/blender-${BLENDER_VERSION}" 2>&1 | tee "evidence/blender-${BLENDER_VERSION}/blender_ci.log"
           grep -F 'CLOUD_REAL_BLENDER: PASS' "evidence/blender-${BLENDER_VERSION}/blender_ci.log"
       - name: Verify native input bounds, mode safety, and failure rollback
         shell: bash
@@ -117,9 +117,19 @@ jobs:
           set -euo pipefail
           "$BLENDER_PATH" --background --factory-startup --python-exit-code 1 \
             --python scripts/blender_quality_gate.py -- \
-            addon/cloud_spiral_lobe_builder_v031.py "evidence/blender-${BLENDER_VERSION}" \
+            addon/cloud_spiral_lobe_builder_v04.py "evidence/blender-${BLENDER_VERSION}" \
             2>&1 | tee "evidence/blender-${BLENDER_VERSION}/quality_ci.log"
           grep -F 'CLOUD_REAL_BLENDER_QUALITY: PASS' "evidence/blender-${BLENDER_VERSION}/quality_ci.log"
+      - name: Compare v0.4 organic mesh against exact v0.3.1 legacy topology
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$BLENDER_PATH" --background --factory-startup --python-exit-code 1 \
+            --python scripts/puffy_geometry_compare.py -- \
+            addon/cloud_spiral_lobe_builder_v031.py addon/cloud_spiral_lobe_builder_v04.py \
+            "evidence/blender-${BLENDER_VERSION}" \
+            2>&1 | tee "evidence/blender-${BLENDER_VERSION}/puffy_geometry.log"
+          grep -F 'CLOUD_PUFF_NATIVE: PASS' "evidence/blender-${BLENDER_VERSION}/puffy_geometry.log"
       - name: Upload Blender reports even on failure
         if: always()
         uses: actions/upload-artifact@v4
@@ -168,7 +178,7 @@ jobs:
             bash -c 'openbox >/tmp/cloud-openbox.log 2>&1 & sleep 1; exec timeout --signal=TERM 150s "$@"' \
             _ "$BLENDER_PATH" --factory-startup --python-exit-code 1 \
             --python scripts/gui_smoke.py -- \
-            addon/cloud_spiral_lobe_builder_v031.py evidence/gui \
+            addon/cloud_spiral_lobe_builder_v04.py evidence/gui \
             2>&1 | tee evidence/gui/gui.log
           grep -F 'CLOUD_GUI_REAL_BLENDER: PASS' evidence/gui/gui.log
           python3 - <<'PY'
