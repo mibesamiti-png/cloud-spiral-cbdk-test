@@ -8,6 +8,7 @@ from __future__ import annotations
 import hashlib
 import importlib.util
 import json
+import os
 import math
 import sys
 import time
@@ -214,28 +215,32 @@ def run(source, out):
             return {'runs':len(stats), 'first_vertices': stats[0]['vertices']}
         check('repeat_generation', repeat)
 
-        try:
-            image = out/'cloud_preview.png'
-            cam_data=bpy.data.cameras.new('TestCamera')
-            cam=bpy.data.objects.new('TestCamera',cam_data)
-            bpy.context.scene.collection.objects.link(cam)
-            cam.location=(2.5,-4.5,3.4)
-            from mathutils import Vector
-            cam.rotation_euler=(Vector((0,0,0))-cam.location).to_track_quat('-Z','Y').to_euler()
-            cam_data.type='ORTHO'
-            cam_data.ortho_scale=6.5
-            bpy.context.scene.camera=cam
-            scene=bpy.context.scene
-            scene.render.engine='BLENDER_WORKBENCH'
-            scene.render.resolution_x=800
-            scene.render.resolution_y=600
-            scene.render.resolution_percentage=100
-            scene.render.filepath=str(image)
-            bpy.ops.render.render(write_still=True)
-            evidence['preview_image']=str(image.name)
-        except Exception as exc:
-            evidence['preview_warning']=repr(exc)
-            print('CLOUD_RENDER_WARNING: '+repr(exc), flush=True)
+        if os.getenv("CLOUD_SKIP_RENDER") == "1":
+            evidence['preview_skipped'] = 'CLOUD_SKIP_RENDER=1; Windows runner without OpenGL'
+            print('CLOUD_RENDER_SKIPPED: requested by CI', flush=True)
+        else:
+            try:
+                image = out/'cloud_preview.png'
+                cam_data=bpy.data.cameras.new('TestCamera')
+                cam=bpy.data.objects.new('TestCamera',cam_data)
+                bpy.context.scene.collection.objects.link(cam)
+                cam.location=(2.5,-4.5,3.4)
+                from mathutils import Vector
+                cam.rotation_euler=(Vector((0,0,0))-cam.location).to_track_quat('-Z','Y').to_euler()
+                cam_data.type='ORTHO'
+                cam_data.ortho_scale=6.5
+                bpy.context.scene.camera=cam
+                scene=bpy.context.scene
+                scene.render.engine='BLENDER_WORKBENCH'
+                scene.render.resolution_x=800
+                scene.render.resolution_y=600
+                scene.render.resolution_percentage=100
+                scene.render.filepath=str(image)
+                bpy.ops.render.render(write_still=True)
+                evidence['preview_image']=str(image.name)
+            except Exception as exc:
+                evidence['preview_warning']=repr(exc)
+                print('CLOUD_RENDER_WARNING: '+repr(exc), flush=True)
 
         bpy.ops.wm.save_as_mainfile(filepath=str(out/'cloud_test.blend'))
         check('unregister', addon.unregister)
