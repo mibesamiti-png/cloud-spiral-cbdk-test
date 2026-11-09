@@ -165,6 +165,9 @@ def make_lobes():
         assert bpy.ops.mesh.cloud_spiral_generate() == {"FINISHED"}
         candidate = bpy.context.view_layer.objects.active
         check = count_self_intersections(candidate.data)
+        assert check["non_adjacent_intersection_pairs"] == 0, (
+            "Permitted PUFFY control combination self-intersects", name, check
+        )
         extremes.append({"name": name, "parameters": [puff, outline, rim], **check})
     settings.puffiness = 0.55
     settings.outline_strength = 0.09
