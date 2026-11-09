@@ -1,4 +1,4 @@
-"""Native (not mocked) Blender smoke suite for Cloud Spiral v0.3.1.
+"""Native (not mocked) Blender smoke suite for Cloud Spiral v0.4.
 
 Only synthetic meshes are generated. Blender --background --factory-startup
 --python-exit-code 1 --python scripts/native_smoke.py -- SOURCE OUT
@@ -61,12 +61,12 @@ def lobes():
 
 def run(source, out):
     bpy.ops.wm.read_factory_settings(use_empty=True)
-    spec = importlib.util.spec_from_file_location('cloud_spiral_lobe_builder_v031', source)
+    spec = importlib.util.spec_from_file_location('cloud_spiral_lobe_builder_v04', source)
     assert spec is not None and spec.loader is not None
     addon = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = addon
     spec.loader.exec_module(addon)
-    assert tuple(addon.bl_info['version']) == (0, 3, 1)
+    assert tuple(addon.bl_info['version']) == (0, 4, 0)
 
     evidence = {
         'status': 'RUNNING', 'blender': bpy.app.version_string,
@@ -121,6 +121,8 @@ def run(source, out):
 
         def single():
             settings.mode = 'SINGLE'
+            assert settings.shape_style == 'PUFFY'
+            assert abs(settings.puffiness - 0.55) < 1e-5
             settings.spiral_enabled = True
             result = bpy.ops.mesh.cloud_spiral_generate()
             assert result == {'FINISHED'}, result
@@ -128,6 +130,8 @@ def run(source, out):
             assert len(objs) == 1, len(objs)
             assert bpy.context.view_layer.objects.active == objs[0]
             stats = inspect_mesh(objs[0].data)
+            assert stats['max_z'] > 0.6, stats
+            assert objs[0].get('cloud_shape_style') == 'PUFFY'
             evidence['meshes'].append(stats)
             return stats
         check('single_lobe_closed_oriented', single)
