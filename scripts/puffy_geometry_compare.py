@@ -6,6 +6,7 @@ while PUFFY is measurably fuller, closed, correctly wound, and user-adjustable.
 from __future__ import annotations
 import importlib.util
 import json
+import os
 import math
 import sys
 import traceback
@@ -176,10 +177,14 @@ def main():
         report["checks"].append({"name":"roundness_control_changes_volume", "status":"PASS"})
         print("CLOUD_PUFF_PASS: roundness_control_changes_volume", flush=True)
 
-        try:
-            report["preview"] = render_comparison(legacy, puffy, out / "cloud_v04_comparison.png")
-        except Exception as exc:
-            report["warnings"].append("Preview failure; numeric geometry still tested: " + repr(exc))
+        if os.getenv("CLOUD_SKIP_RENDER") == "1":
+            report['preview'] = {'status': 'SKIPPED_NO_GPU', 'reason': 'CLOUD_SKIP_RENDER=1 in Windows runner'}
+            print('CLOUD_PUFF_RENDER_SKIPPED: no Windows OpenGL', flush=True)
+        else:
+            try:
+                report["preview"] = render_comparison(legacy, puffy, out / "cloud_v04_comparison.png")
+            except Exception as exc:
+                report["warnings"].append("Preview failure; numeric geometry still tested: " + repr(exc))
         report["status"] = "PASS"
         print("CLOUD_PUFF_NATIVE: PASS", flush=True)
     except Exception as exc:
