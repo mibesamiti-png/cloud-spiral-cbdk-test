@@ -147,6 +147,28 @@ def make_lobes():
     assert single and single.type == "MESH"
     assert single.get("cloud_spiral_lobe")
     stats = count_self_intersections(single.data)
+    assert stats["non_adjacent_intersection_pairs"] == 0, (
+        "Default PUFFY lobe has BVH-detected self-intersections", stats
+    )
+
+    # Exercise the high-end permitted silhouette inputs before print acceptance.
+    # These are diagnostics only until each combination has independent evidence.
+    extremes = []
+    for name, puff, outline, rim in [
+        ("full_puff_and_outline", 1.0, 0.15, 0.30),
+        ("flat_no_outline", 0.0, 0.0, 0.0),
+        ("max_outline_min_rim", 0.55, 0.15, 0.0),
+    ]:
+        settings.puffiness = puff
+        settings.outline_strength = outline
+        settings.rim_roundness = rim
+        assert bpy.ops.mesh.cloud_spiral_generate() == {"FINISHED"}
+        candidate = bpy.context.view_layer.objects.active
+        check = count_self_intersections(candidate.data)
+        extremes.append({"name": name, "parameters": [puff, outline, rim], **check})
+    settings.puffiness = 0.55
+    settings.outline_strength = 0.09
+    settings.rim_roundness = 0.22
 
     settings.mode = "REFERENCE_3"
     result = bpy.ops.mesh.cloud_spiral_generate()
@@ -172,8 +194,9 @@ def make_lobes():
             hits = a.overlap(b)
             overlaps.append({"objects": [lobes[i].name, lobes[j].name],
                              "triangle_or_face_overlaps": len(hits)})
-    return {"single_lobe": stats, "independent_lobes": len(lobes),
-            "three_lobe_pairs": overlaps, "union_mesh_created": False}
+    return {"single_lobe": stats, "parameter_extremes": extremes,
+            "independent_lobes": len(lobes), "three_lobe_pairs": overlaps,
+            "union_mesh_created": False}
 
 
 def main():
