@@ -100,7 +100,7 @@ def tick():
                 return 0.3
             window, area, region = context
             STATE["window"], STATE["area"], STATE["region"] = context
-            spec = importlib.util.spec_from_file_location("cloud_spiral_gui_v031", SOURCE)
+            spec = importlib.util.spec_from_file_location("cloud_spiral_gui_v04", SOURCE)
             if spec is None or spec.loader is None:
                 raise RuntimeError("No addon module")
             addon = importlib.util.module_from_spec(spec)
@@ -141,6 +141,8 @@ def tick():
                 subprocess.run(["xdotool", "click", "1"], check=True, timeout=10)
                 settings = bpy.context.scene.cloud_spiral_settings
                 settings.mode = "SINGLE"
+                assert settings.shape_style == "PUFFY"
+                assert abs(settings.puffiness - 0.55) < 1e-5
                 before = lobe_count()
                 STATE["original_count"] = before
                 assert bpy.ops.mesh.cloud_spiral_preset(preset="SOFT") == {"FINISHED"}
