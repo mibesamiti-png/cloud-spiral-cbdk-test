@@ -1,34 +1,39 @@
-# Cloud Spiral × CBDK — v0.3.1 UI 実験
+# Cloud Spiral × CBDK — v0.4 ふっくら雲ローブ実験
 
-GitHub Actionsを使用してBlender実機テストを行う**公開**実験用リポジトリ。コードおよびActions成果物は第三者に閲覧され得るため、個人データや非公開の3Dモデルを追加しない。
+**最新版：Cloud Spiral Lobe Builder v0.4（実Blender 3版＋Linux GUIのCI合格、Windowsの最終受入は未実施）**
 
-## ファイル
-- `addon/cloud_spiral_lobe_builder_v031.py`：最新v0.3.1（旧v0.3を残して非破壊変更）
-- `addon/cloud_spiral_lobe_builder_v03.py`：比較用のv0.3
-- `scripts/native_smoke.py`：実Blenderでアドオン登録・生成・トポロジー・UI新機能・再登録を検査
-- `scripts/cbdk_static.py`：公開CBDKのコミットを固定して解析するジョブ
-- `.github/workflows/cloud-blender-ci.yml`：Blender 4.4.3 / 4.5.15 / 5.2.1 と CBDK静的解析
+> このGitHubリポジトリは **Public**。個人データ・非公開の3D素材を追加しないこと。変更はドラフトPR #1に保持し、mainには統合していない。
 
-## v0.3.1の変更点
-- **溝スタイル**：ふんわり／くっきり／標準をボタンで適用。半径・分割数を維持して溝の深さ、幅、縁の丸み、ドーム高さだけを変更。
-- **3ローブの調整**：左右ローブの「広がり」「大きさ」を個別に変更。いずれも`1.0`で旧標準配置を再現。
-- **詳細設定の折りたたみ**：通常は主要項目のみ。細かい螺旋・中央トポロジー・解像度は切り替え表示。
-- **操作ヒント**：スタイルの適用後に生成ボタンを押す。オブジェクトモード以外では生成を無効化。
-- **デフォルトの幾何形状はv0.3と同じ**。旧ソースは改変せず保持。
+## ダウンロードと使用方法
+- [GitHub Actions v0.4 成功実行](https://github.com/mibesamiti-png/cloud-spiral-cbdk-test/actions/runs/42539777746)
+- [v0.4 インストールZIPを含む成果物](https://github.com/mibesamiti-png/cloud-spiral-cbdk-test/actions/runs/42539777746/artifacts/13641066019)
+- [実Blender 4.4.3の新旧比較画像・検査JSON](https://github.com/mibesamiti-png/cloud-spiral-cbdk-test/actions/runs/42539777746/artifacts/13640837847)
+- [v0.4 GUI画面・Undo/Redo結果](https://github.com/mibesamiti-png/cloud-spiral-cbdk-test/actions/runs/42539777746/artifacts/13640946735)
 
-## インストール・操作
-1. GitHub Actionsの成功した`cloud-static-and-addon-...` artifactを取得し、ZIP内の`Cloud_Spiral_Lobe_Builder_v0.3.1.zip`を展開・インストールする（またはPythonファイルを直接インストール）。
-2. Blenderのプリファレンスからアドオンを有効化し、3Dビューの`N`キーで**Cloud Spiral**タブを表示。
-3. 「単体」または「参考画像風3個」を選択し、必要なら溝スタイルと広がり・大きさを変更して「渦雲を生成」を押す。
-4. 初期の`1.0`設定で従来と同じ3ローブ配置に戻る。
+1. `Cloud_Spiral_Lobe_Builder_v0.4.zip` を入手し、Blenderのアドオンとしてインストール。有効化できない場合はZIP内の `cloud_spiral_lobe_builder_v04.py` を直接指定。
+2. 3DビューのNキー → Cloud Spiralタブ → 「単体」または「参考画像風3個」。
+3. 「雲の輪郭」は**ふっくら**（デフォルト）と**従来の彫刻**を選択可能。
+4. 「ふくらみ」「外周のうねり」「底面の丸み」と、従来の「溝スタイル」を調整して「渦雲を生成」。
 
-## 品質ゲート
-- GitHub Actionsで各Blenderの実行ログに`CLOUD_REAL_BLENDER: PASS`を確認して初めてネイティブ成功とする。
-- CBDKはBlender API静的解析用。CIでは参照コミット`8665a3c136ae81efbd28a820e7de50ef6ee59332`に固定。
-- ヘッドレス検査はWindowsのクリック操作やUndo体験、造形美、自己交差なし、3Dプリント適性を保証しない。
-- PRはすべての必要な検証が揃うまでドラフト・未マージ。
+## v0.4の変更
+- 厚みを増した上面ドーム、円周上の穏やかな凹凸、底面へ丸め込む6段の側面リング。
+- 旧版の形状を完全再現できるCLASSICモードを追加。Blender検証で頂点・ポリゴン座標の一致を確認。
+- Blender 4.4.3の初期設定・半径1の場合、最大高さ **0.300→0.850（2.83倍）**、体積 **0.697→1.732（2.48倍）**。境界辺・面向き矛盾・非多様体は0。
+- 新たな`scripts/puffy_geometry_compare.py`で、**旧v0.3.1との比較・3パラメータが形状に与える効果**を検査。
 
-## 制限
-生成は追加オブジェクト方式で既存形状をリアルタイムには変更しない。3ローブは独立したオブジェクト。単体モードで「交互」選択時は反時計扱い。
+## 主要ファイル
+- `addon/cloud_spiral_lobe_builder_v04.py`：最新版。
+- `addon/cloud_spiral_lobe_builder_v031.py`：前回のv0.3.1を保持（変更なし）。
+- `scripts/native_smoke.py`：基本生成・トポロジー・3ローブ・UI設定のBlender検査。
+- `scripts/blender_quality_gate.py`：不正値・編集中ガード・途中例外の後片付け。
+- `scripts/puffy_geometry_compare.py`：旧版互換性と立体度を比較、PNG書き出し。
+- `scripts/gui_smoke.py`：Linux Xvfb Blender実GUIのNパネル、生成、Ctrl+Z/Redoと画面PNG。
+- `.github/workflows/cloud-blender-ci.yml`：Blender 4.4.3/4.5.15/5.2.1 + Linux GUI + CBDK解析。
 
-[Notionの実験管理](https://app.notion.com/p/412948b7493781d092b2eb7dc2f1e048)
+## 検証の限界
+- 5/5のCI成功は**技術的な動作確認**。Windowsでのマウス操作感、理想の雲造形、複数ローブの一体化、自己交差と3Dプリント適性の保証ではない。
+- 現在のシルエットは「**厚みのある渦彫りの丸いローブ**」。リアルな積雲の塊が融合した見た目は次の改善対象。
+- このレポジトリはPublic。Actions artifactsも閲覧・保持期限あり（約30日）。
+- 実作業総時間およびCBDKの効率化時間は測定していないため、短縮率は主張しない。
+
+[CLD-06 v0.4の詳細検証結果](docs/CLD06_V04_RESULTS.md) · [CLD-01〜05の引き継ぎ](docs/CLD04_CLD05_RESULTS.md) · [Notion進捗](https://app.notion.com/p/413948b749378104a06ac74679c8b9dd)
