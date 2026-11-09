@@ -1,0 +1,392 @@
+name: Cloud Spiral v0.4 | Native Blender and CBDK
+
+"on":
+  push:
+    branches:
+      - test/cloud-v03-blender-native
+    paths:
+      - 'addon/**'
+      - 'scripts/**'
+      - '.github/workflows/cloud-blender-ci.yml'
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cloud-native-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  cbdk-static:
+    name: CBDK AST and Blender API audit
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout private cloud experiment
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Read-only fetch of reference CBDK revision
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone --quiet --depth 1 --branch feature/v0.18-shape-diagnostics https://github.com/mibesamiti-png/Chappy-Blender-DevKit.git /tmp/cbdk-reference
+          git -C /tmp/cbdk-reference fetch --quiet --depth 1 origin 8665a3c136ae81efbd28a820e7de50ef6ee59332
+          git -C /tmp/cbdk-reference checkout --quiet --detach 8665a3c136ae81efbd28a820e7de50ef6ee59332
+          test "$(git -C /tmp/cbdk-reference rev-parse HEAD)" = "8665a3c136ae81efbd28a820e7de50ef6ee59332"
+      - name: Run actual CBDK parser and audit
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p evidence/static
+          python scripts/cbdk_static.py /tmp/cbdk-reference addon/cloud_spiral_lobe_builder_v04.py evidence/static 2>&1 | tee evidence/static/cbdk.log
+      - name: Package installable addon
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          from zipfile import ZipFile, ZIP_DEFLATED
+          target=Path('evidence/static/Cloud_Spiral_Lobe_Builder_v0.4.zip')
+          source=Path('addon/cloud_spiral_lobe_builder_v04.py')
+          with ZipFile(target,'w',ZIP_DEFLATED) as z:
+              z.write(source,arcname=source.name)
+          assert target.is_file() and target.stat().st_size>1000
+          print('CLOUD_ADDON_PACKAGE: PASS', target)
+          PY
+      - name: Upload static report and installer
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cloud-static-and-addon-${{ github.run_id }}
+          path: evidence/static/
+          if-no-files-found: warn
+          retention-days: 30
+
+  blender-native:
+    name: Blender ${{ matrix.blender-version }} native
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        blender-version: ['4.4.3', '4.5.15', '5.2.1']
+    env:
+      BLENDER_VERSION: ${{ matrix.blender-version }}
+      LIBGL_ALWAYS_SOFTWARE: '1'
+    steps:
+      - name: Checkout private cloud experiment
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install headless graphics dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libegl1 libgl1
+      - name: Download Blender and verify official checksum
+        shell: bash
+        run: |
+          set -euo pipefail
+          base="https://download.blender.org/release/Blender${BLENDER_VERSION%.*}"
+          archive="blender-${BLENDER_VERSION}-linux-x64.tar.xz"
+          curl --fail --location --retry 4 --retry-delay 3 --connect-timeout 30 "${base}/blender-${BLENDER_VERSION}.sha256" -o blender.sha256
+          curl --fail --location --retry 4 --retry-delay 3 --connect-timeout 30 "${base}/${archive}" -o "${archive}"
+          grep -F "${archive}" blender.sha256 | sha256sum --check --status
+          tar -xJf "${archive}"
+          echo "BLENDER_PATH=$PWD/blender-${BLENDER_VERSION}-linux-x64/blender" >> "$GITHUB_ENV"
+      - name: Execute real Blender API and geometry smoke checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "evidence/blender-${BLENDER_VERSION}"
+          "$BLENDER_PATH" --version | head -n 3
+          "$BLENDER_PATH" --background --factory-startup --python-exit-code 1 --python scripts/native_smoke.py -- addon/cloud_spiral_lobe_builder_v04.py "evidence/blender-${BLENDER_VERSION}" 2>&1 | tee "evidence/blender-${BLENDER_VERSION}/blender_ci.log"
+          grep -F 'CLOUD_REAL_BLENDER: PASS' "evidence/blender-${BLENDER_VERSION}/blender_ci.log"
+      - name: Verify native input bounds, mode safety, and failure rollback
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$BLENDER_PATH" --background --factory-startup --python-exit-code 1 \
+            --python scripts/blender_quality_gate.py -- \
+            addon/cloud_spiral_lobe_builder_v04.py "evidence/blender-${BLENDER_VERSION}" \
+            2>&1 | tee "evidence/blender-${BLENDER_VERSION}/quality_ci.log"
+          grep -F 'CLOUD_REAL_BLENDER_QUALITY: PASS' "evidence/blender-${BLENDER_VERSION}/quality_ci.log"
+      - name: Compare v0.4 organic mesh against exact v0.3.1 legacy topology
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$BLENDER_PATH" --background --factory-startup --python-exit-code 1 \
+            --python scripts/puffy_geometry_compare.py -- \
+            addon/cloud_spiral_lobe_builder_v031.py addon/cloud_spiral_lobe_builder_v04.py \
+            "evidence/blender-${BLENDER_VERSION}" \
+            2>&1 | tee "evidence/blender-${BLENDER_VERSION}/puffy_geometry.log"
+          grep -F 'CLOUD_PUFF_NATIVE: PASS' "evidence/blender-${BLENDER_VERSION}/puffy_geometry.log"
+      - name: Verify real Blender N-panel control matrix and BVH shape diagnostics
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$BLENDER_PATH" --background --factory-startup --python-exit-code 1 \
+            --python scripts/acceptance_diagnostics.py -- \
+            addon/cloud_spiral_lobe_builder_v04.py "evidence/blender-${BLENDER_VERSION}" \
+            2>&1 | tee "evidence/blender-${BLENDER_VERSION}/acceptance_diagnostics.log"
+          grep -F 'CLOUD_ACCEPTANCE_DIAGNOSTICS: PASS' "evidence/blender-${BLENDER_VERSION}/acceptance_diagnostics.log"
+      - name: Upload Blender reports even on failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cloud-blender-${{ matrix.blender-version }}-${{ github.run_id }}
+          path: evidence/blender-${{ matrix.blender-version }}/
+          if-no-files-found: warn
+          retention-days: 30
+
+
+  blender-gui-xvfb:
+    name: Blender 4.4.3 virtual GUI / N-panel / Undo-Redo
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      BLENDER_VERSION: '4.4.3'
+      LIBGL_ALWAYS_SOFTWARE: '1'
+    steps:
+      - name: Checkout experimental source
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install virtual-display graphics libraries
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends xvfb xauth openbox xdotool scrot libegl1 libgl1 libxkbcommon-x11-0 libxrender1
+      - name: Download official Blender release with hash verification
+        shell: bash
+        run: |
+          set -euo pipefail
+          base="https://download.blender.org/release/Blender${BLENDER_VERSION%.*}"
+          archive="blender-${BLENDER_VERSION}-linux-x64.tar.xz"
+          curl --fail --location --retry 4 --retry-delay 3 --connect-timeout 30 "${base}/blender-${BLENDER_VERSION}.sha256" -o blender.sha256
+          curl --fail --location --retry 4 --retry-delay 3 --connect-timeout 30 "${base}/${archive}" -o "${archive}"
+          grep -F "${archive}" blender.sha256 | sha256sum --check --status
+          tar -xJf "${archive}"
+          echo "BLENDER_PATH=$PWD/blender-${BLENDER_VERSION}-linux-x64/blender" >> "$GITHUB_ENV"
+      - name: Run real graphical Blender using Xvfb
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p evidence/gui
+          xvfb-run --auto-servernum --server-args="-screen 0 1600x900x24" \
+            bash -c 'openbox >/tmp/cloud-openbox.log 2>&1 & sleep 1; exec timeout --signal=TERM 150s "$@"' \
+            _ "$BLENDER_PATH" --factory-startup --python-exit-code 1 \
+            --python scripts/gui_smoke.py -- \
+            addon/cloud_spiral_lobe_builder_v04.py evidence/gui \
+            2>&1 | tee evidence/gui/gui.log
+          grep -F 'CLOUD_GUI_REAL_BLENDER: PASS' evidence/gui/gui.log
+          python3 - <<'PY'
+          from pathlib import Path
+          import json
+          report=json.loads(Path('evidence/gui/gui_report.json').read_text(encoding='utf-8'))
+          assert report['status']=='PASS',report
+          assert report['background'] is False,report
+          names={check['name'] for check in report['checks'] if check['status']=='PASS'}
+          required={'real_gui_window_and_N_sidebar','gui_context_preset_and_generate',
+                    'real_gui_screenshot','real_gui_undo','real_gui_redo'}
+          assert required.issubset(names),(required-names,report)
+          png=Path('evidence/gui/blender_window.png')
+          assert png.read_bytes()[:8]==b'\x89PNG\r\n\x1a\n'
+          print('CLOUD_GUI_ARTIFACT_VERIFIED',png.stat().st_size)
+          PY
+      - name: Smoke-test portable review panel in real graphical Blender
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p evidence/gui-review
+          xvfb-run --auto-servernum --server-args="-screen 0 1600x900x24" \
+            bash -c 'openbox >/tmp/cloud-review-openbox.log 2>&1 & sleep 1; exec timeout --signal=TERM 150s "$@"' \
+            _ "$BLENDER_PATH" --factory-startup --python-exit-code 1 \
+            --python scripts/windows_review_session.py -- \
+            addon/cloud_spiral_lobe_builder_v04.py evidence/gui-review --gui-smoke \
+            2>&1 | tee evidence/gui-review/qa_panel_gui.log
+          grep -F 'CLOUD_WINDOWS_REVIEW_GUI_SMOKE: PASS' evidence/gui-review/qa_panel_gui.log
+          python3 - <<'PY'
+          from pathlib import Path
+          import json
+          data=json.loads(Path('evidence/gui-review/windows_review_gui_smoke.json').read_text(encoding='utf8'))
+          assert data['status']=='PASS' and data['gui_window_available']
+          assert data['Cloud_QA_panel_registered'] and data['generated']['total_sample_objects']==4
+          assert data['stage_CLD04']=='INCOMPLETE' and data['stage_CLD06']=='INCOMPLETE'
+          print('CLOUD_WINDOWS_REVIEW_GUI_VALIDATED: PASS (Linux visual context only)')
+          PY
+      - name: Keep GUI screenshots, report and failure logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cloud-gui-xvfb-${{ github.run_id }}
+          path: |
+            evidence/gui/
+            evidence/gui-review/
+          if-no-files-found: warn
+          retention-days: 30
+
+
+  windows-blender-native:
+    name: Windows Blender 4.4.3 native acceptance
+    runs-on: windows-2022
+    timeout-minutes: 25
+    env:
+      BLENDER_VERSION: '4.4.3'
+      CLOUD_SKIP_RENDER: '1'
+    steps:
+      - name: Checkout source without persisting credentials
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Fetch official portable Blender ZIP and verify SHA-256
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $version = $env:BLENDER_VERSION
+          $base = "https://download.blender.org/release/Blender4.4"
+          $archive = "blender-$version-windows-x64.zip"
+          curl.exe --fail --location --retry 4 --retry-delay 3 --connect-timeout 30 "$base/blender-$version.sha256" --output "blender.sha256"
+          if ($LASTEXITCODE -ne 0) { throw "Failed to download official Blender SHA-256 manifest" }
+          curl.exe --fail --location --retry 4 --retry-delay 3 --connect-timeout 30 "$base/$archive" --output "$archive"
+          if ($LASTEXITCODE -ne 0) { throw "Failed to download Blender portable ZIP" }
+          $line = Get-Content "blender.sha256" | Where-Object { $_ -match [regex]::Escape($archive) } | Select-Object -First 1
+          if (-not $line) { throw "Blender archive absent from official checksum manifest" }
+          $expected = ([regex]::Match($line, '^[0-9a-fA-F]{64}')).Value.ToUpperInvariant()
+          if ($expected.Length -ne 64) { throw "Malformed official checksum: $line" }
+          $actual = (Get-FileHash "$archive" -Algorithm SHA256).Hash.ToUpperInvariant()
+          if ($actual -ne $expected) { throw "Blender download SHA-256 mismatch" }
+          Write-Host "WINDOWS_BLENDER_SHA256_VERIFIED: $archive"
+          Expand-Archive -Path "$archive" -DestinationPath "blender-portable"
+          $blender = (Resolve-Path "blender-portable/blender-$version-windows-x64/blender.exe").Path
+          if (-not (Test-Path $blender)) { throw "Blender executable not found" }
+          "BLENDER_PATH=$blender" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+      - name: Run real native Windows Blender smoke tests
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path evidence/windows-4.4.3 | Out-Null
+          & $env:BLENDER_PATH --version
+          & $env:BLENDER_PATH --background --factory-startup --python-exit-code 1 --python scripts/native_smoke.py -- addon/cloud_spiral_lobe_builder_v04.py evidence/windows-4.4.3 2>&1 | Tee-Object -FilePath evidence/windows-4.4.3/blender_ci.log
+          if ($LASTEXITCODE -ne 0) { throw "Native Windows Blender smoke failed: exit $LASTEXITCODE" }
+          if (-not (Select-String -Path evidence/windows-4.4.3/blender_ci.log -Pattern 'CLOUD_REAL_BLENDER: PASS' -SimpleMatch)) { throw "Native Windows success marker missing" }
+      - name: Test failure rollback and input handling in Windows Blender
+        shell: pwsh
+        run: |
+          & $env:BLENDER_PATH --background --factory-startup --python-exit-code 1 --python scripts/blender_quality_gate.py -- addon/cloud_spiral_lobe_builder_v04.py evidence/windows-4.4.3 2>&1 | Tee-Object -FilePath evidence/windows-4.4.3/quality_ci.log
+          if ($LASTEXITCODE -ne 0) { throw "Windows rollback quality gate failed: exit $LASTEXITCODE" }
+          if (-not (Select-String -Path evidence/windows-4.4.3/quality_ci.log -Pattern 'CLOUD_REAL_BLENDER_QUALITY: PASS' -SimpleMatch)) { throw "Windows rollback success marker missing" }
+      - name: Compare classic and rounded geometry in Windows Blender
+        shell: pwsh
+        run: |
+          & $env:BLENDER_PATH --background --factory-startup --python-exit-code 1 --python scripts/puffy_geometry_compare.py -- addon/cloud_spiral_lobe_builder_v031.py addon/cloud_spiral_lobe_builder_v04.py evidence/windows-4.4.3 2>&1 | Tee-Object -FilePath evidence/windows-4.4.3/puffy_geometry.log
+          if ($LASTEXITCODE -ne 0) { throw "Windows old/new mesh comparison failed: exit $LASTEXITCODE" }
+          if (-not (Select-String -Path evidence/windows-4.4.3/puffy_geometry.log -Pattern 'CLOUD_PUFF_NATIVE: PASS' -SimpleMatch)) { throw "Windows geometry comparison success marker missing" }
+      - name: Validate N-panel branches and shape intersections in real Windows Blender
+        shell: pwsh
+        run: |
+          & $env:BLENDER_PATH --background --factory-startup --python-exit-code 1 --python scripts/acceptance_diagnostics.py -- addon/cloud_spiral_lobe_builder_v04.py evidence/windows-4.4.3 2>&1 | Tee-Object -FilePath evidence/windows-4.4.3/acceptance_diagnostics.log
+          if ($LASTEXITCODE -ne 0) { throw "Windows UI/BVH diagnostic failure: exit $LASTEXITCODE" }
+          if (-not (Select-String -Path evidence/windows-4.4.3/acceptance_diagnostics.log -Pattern 'CLOUD_ACCEPTANCE_DIAGNOSTICS: PASS' -SimpleMatch)) { throw "Windows UI/BVH success marker missing" }
+      - name: Smoke-test one-click Windows review kit in real Blender
+        shell: pwsh
+        run: |
+          & $env:BLENDER_PATH --background --factory-startup --python-exit-code 1 --python scripts/windows_review_session.py -- addon/cloud_spiral_lobe_builder_v04.py evidence/windows-4.4.3 --smoke 2>&1 | Tee-Object -FilePath evidence/windows-4.4.3/review_kit_smoke.log
+          if ($LASTEXITCODE -ne 0) { throw "Windows review kit setup smoke failed: exit $LASTEXITCODE" }
+          if (-not (Select-String -Path evidence/windows-4.4.3/review_kit_smoke.log -Pattern 'CLOUD_WINDOWS_REVIEW_KIT_SMOKE: PASS' -SimpleMatch)) { throw "Review kit setup success marker missing" }
+          $report = Get-Content -Raw -Encoding utf8 "evidence/windows-4.4.3/windows_review_kit_smoke.json" | ConvertFrom-Json
+          if ($report.status -ne 'PASS') { throw "Review kit startup smoke not PASS" }
+          if ($report.generated.total_sample_objects -ne 4) { throw "Review kit did not generate one plus three lobes" }
+          if ($report.review.stage_CLD04 -ne 'INCOMPLETE' -or $report.review.stage_CLD06 -ne 'INCOMPLETE') { throw "Local manual acceptance must start INCOMPLETE" }
+          Write-Host 'CLOUD_WINDOWS_REVIEW_KIT_VALIDATED: PASS (not human acceptance)'
+      - name: Package portable Windows manual review kit
+        shell: pwsh
+        run: |
+          $root = 'evidence/windows-4.4.3/review-kit'
+          New-Item -ItemType Directory -Force -Path "$root/addon", "$root/scripts" | Out-Null
+          Copy-Item "addon/cloud_spiral_lobe_builder_v04.py" "$root/addon/"
+          Copy-Item "scripts/windows_review_session.py" "$root/scripts/"
+          Copy-Item "run_windows_review.bat" "$root/"
+          Copy-Item "WINDOWS_REVIEW_README.md" "$root/"
+          $zip = 'evidence/windows-4.4.3/Cloud_Spiral_Windows_Review_Kit.zip'
+          Compress-Archive -Path "$root/*" -DestinationPath $zip -CompressionLevel Optimal -Force
+          if ((Get-Item $zip).Length -lt 1000) { throw "Review kit ZIP unexpectedly empty" }
+          Write-Host "CLOUD_WINDOWS_REVIEW_KIT_ZIP: $zip"
+      - name: Rehearse the actual zipped distribution on Windows Blender
+        shell: pwsh
+        run: |
+          $archive = 'evidence/windows-4.4.3/Cloud_Spiral_Windows_Review_Kit.zip'
+          $unpacked = 'evidence/windows-4.4.3/packaged-kit-verification'
+          Expand-Archive -Path $archive -DestinationPath $unpacked -Force
+          $paths = @(
+            'run_windows_review.bat',
+            'WINDOWS_REVIEW_README.md',
+            'addon/cloud_spiral_lobe_builder_v04.py',
+            'scripts/windows_review_session.py'
+          )
+          foreach ($rel in $paths) {
+            $actual = Join-Path $unpacked $rel
+            if (-not (Test-Path $actual -PathType Leaf)) {
+              throw "Distributed Windows ZIP is missing: $rel"
+            }
+            $original = Join-Path 'evidence/windows-4.4.3/review-kit' $rel
+            if ((Get-FileHash $actual -Algorithm SHA256).Hash -ne (Get-FileHash $original -Algorithm SHA256).Hash) {
+              throw "Distributed file does not match staged copy: $rel"
+            }
+          }
+          & $env:BLENDER_PATH --background --factory-startup --python-exit-code 1 --python "$unpacked/scripts/windows_review_session.py" -- "$unpacked/addon/cloud_spiral_lobe_builder_v04.py" "$unpacked/qa-output" --smoke 2>&1 | Tee-Object -FilePath evidence/windows-4.4.3/review_package_smoke.log
+          if ($LASTEXITCODE -ne 0) { throw "Unpacked review kit fails Blender smoke: $LASTEXITCODE" }
+          if (-not (Select-String -Path evidence/windows-4.4.3/review_package_smoke.log -Pattern 'CLOUD_WINDOWS_REVIEW_KIT_SMOKE: PASS' -SimpleMatch)) { throw "Packaged source success marker missing" }
+          $report = Get-Content -Raw -Encoding utf8 "$unpacked/qa-output/windows_review_kit_smoke.json" | ConvertFrom-Json
+          if ($report.generated.total_sample_objects -ne 4) { throw 'Packaged kit did not prepare four cloud objects' }
+          if ($report.review.stage_CLD04 -ne 'INCOMPLETE' -or $report.review.stage_CLD06 -ne 'INCOMPLETE') { throw 'Packaged kit unexpectedly marks acceptance as completed' }
+          Write-Host 'CLOUD_PACKAGED_WINDOWS_KIT_SMOKE: PASS'
+      - name: Validate Windows JSON evidence contains all mandatory passes
+        shell: pwsh
+        run: |
+          $root = "evidence/windows-4.4.3"
+          $reports = @("native_report.json", "quality_report.json", "puffy_geometry_report.json", "acceptance_diagnostics.json")
+          foreach ($file in $reports) {
+            $path = Join-Path $root $file
+            if (-not (Test-Path $path)) { throw "Required report missing: $path" }
+            $data = Get-Content -Raw -Encoding utf8 $path | ConvertFrom-Json
+            if ($data.status -ne "PASS") { throw "Report status is not PASS: $file" }
+          }
+          $native = Get-Content -Raw -Encoding utf8 (Join-Path $root "native_report.json") | ConvertFrom-Json
+          $quality = Get-Content -Raw -Encoding utf8 (Join-Path $root "quality_report.json") | ConvertFrom-Json
+          $geometry = Get-Content -Raw -Encoding utf8 (Join-Path $root "puffy_geometry_report.json") | ConvertFrom-Json
+          if ($native.checks.Count -lt 12) { throw "Too few Windows native checks" }
+          if ($quality.checks.Count -lt 9) { throw "Too few Windows quality checks" }
+          if ($geometry.checks.Count -lt 5) { throw "Too few Windows geometry checks" }
+          $acceptance = Get-Content -Raw -Encoding utf8 (Join-Path $root "acceptance_diagnostics.json") | ConvertFrom-Json
+          if ($acceptance.panel_checks.Count -lt 6) { throw "Too few Windows N-panel mode cases" }
+          if (@($acceptance.panel_checks | Where-Object { $_.status -ne "PASS" }).Count -gt 0) { throw "Windows panel controls failed" }
+          $failed = @($native.checks; $quality.checks; $geometry.checks) | Where-Object { $_.status -ne "PASS" }
+          if ($failed.Count -gt 0) { throw "Some Windows checks were not PASS" }
+          Write-Host "CLOUD_WINDOWS_REAL_BLENDER_ALL_GATES: PASS"
+      - name: Upload one-click local Windows review kit
+        uses: actions/upload-artifact@v4
+        with:
+          name: cloud-windows-review-kit-${{ github.run_id }}
+          # GitHub automatically wraps an artifact in a ZIP. Upload this
+          # folder so the user only needs to unzip ONCE to run the BAT.
+          path: evidence/windows-4.4.3/review-kit/
+          if-no-files-found: error
+          retention-days: 30
+      - name: Keep Windows native logs and generated test scene
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cloud-blender-windows-4.4.3-${{ github.run_id }}
+          path: evidence/windows-4.4.3/
+          if-no-files-found: warn
+          retention-days: 30
