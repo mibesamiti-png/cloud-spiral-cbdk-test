@@ -93,3 +93,23 @@ The first GUI run failed with `typing.get_type_hints failed with: CLOUDQA_Review
 **Acceptance still pending:** The original MVP is 4/5=80% (CLD04 98% user Windows interaction pending), plus separate CLD06 at 90% (aesthetic review pending). This kit bridges the final evidence gap but does not itself satisfy it; stop at 100% only after the real outstanding acceptance criteria are met.
 
 [Japanese user instructions](../WINDOWS_REVIEW_README.md) · [Notion local review kit report](https://app.notion.com/p/413948b74937817d9bb6c6b2026ade60)
+
+## 2026-11-09 — Validate the artifact people actually download (one-unzip kit)
+
+**Verified CI:** [GitHub Actions #42547536657](https://github.com/mibesamiti-png/cloud-spiral-cbdk-test/actions/runs/42547536657) succeeded **6/6 jobs** on SHA `1278c1acdb576f0d66f39694a97da863489f630a`. [One-unzip Windows acceptance kit](https://github.com/mibesamiti-png/cloud-spiral-cbdk-test/actions/runs/42547536657/artifacts/13643679074).
+
+**The avoidable friction:** `actions/upload-artifact` delivers its own ZIP. Uploading our pre-zipped `Cloud_Spiral_Windows_Review_Kit.zip` created a **ZIP-inside-ZIP** experience, requiring the user to unpack twice.
+
+**Fix:** Keep the inner installer ZIP for CI/debug use, but upload the staging **review-kit folder** as the Actions artifact. The downloaded Actions ZIP now has the BAT, Python addon, review script, and Japanese README directly at its root. The final ZIP was inspected to contain exactly those four paths, with archive CRC integrity verified.
+
+**Production-style test:** After packaging, **unpack the actual staged ZIP on Windows Server 2022**, compare SHA-256 for all four files against staging, then launch the **extracted Python file and bundled addon** in real Blender 4.4.3. The packaged release's startup and local report export passed, generated four test objects, and remained `INCOMPLETE` for both human-gated stages. `CLOUD_PACKAGED_WINDOWS_KIT_SMOKE: PASS` in the Windows job proves the check ran (it is not a human GUI acceptance).
+
+**Data-safety defect fixed:** Earlier JSON filenames had second-level time resolution, risking accidental overwrites on consecutive clicks. Filenames now include microseconds and a collision suffix. Windows Blender tested *two back-to-back exports*, confirmed two different JSON files and no changes to the first, then deleted the synthetic test reports instead of shipping them.
+
+**Reusable CBDK recommendations (not incorporated into CBDK itself):**
+- Test final **deliverable bytes after extraction**, not merely source code in the repository.
+- Avoid double packaging when the distribution service already wraps files in a ZIP.
+- For local feedback/evidence, use collision-safe output filenames and retention; never overwrite user reports by default.
+- Distinguish Windows headless packaged smoke, Linux virtual GUI smoke, and unperformed **human Windows acceptance** in progress scoring.
+
+**Still pending:** CLD-04 user Windows N-panel mouse/Undo acceptance (98%) and separate CLD-06 aesthetic review (90%). Original MVP remains 4/5=80%, not 100%. 
