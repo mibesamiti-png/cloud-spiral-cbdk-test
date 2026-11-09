@@ -86,7 +86,10 @@ def inspect(mesh):
 
 def render_comparison(old, puffy, output):
     # Only a synthetic demo scene. Does not alter the user's existing .blend.
-    bpy.ops.wm.read_factory_settings(use_empty=True)
+    # The source meshes already exist in bpy.data: do NOT reset to factory
+    # here, because read_factory_settings() would invalidate their datablocks.
+    for obj in tuple(bpy.data.objects):
+        bpy.data.objects.remove(obj, do_unlink=True)
     objects = []
     for mesh, label, xpos in [(old, "Legacy v0.3.1", -1.25), (puffy, "Puffy v0.4", 1.25)]:
         obj = bpy.data.objects.new(label, mesh)
