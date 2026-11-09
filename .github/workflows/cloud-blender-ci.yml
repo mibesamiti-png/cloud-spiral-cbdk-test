@@ -204,12 +204,35 @@ jobs:
           assert png.read_bytes()[:8]==b'\x89PNG\r\n\x1a\n'
           print('CLOUD_GUI_ARTIFACT_VERIFIED',png.stat().st_size)
           PY
+      - name: Smoke-test portable review panel in real graphical Blender
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p evidence/gui-review
+          xvfb-run --auto-servernum --server-args="-screen 0 1600x900x24" \
+            bash -c 'openbox >/tmp/cloud-review-openbox.log 2>&1 & sleep 1; exec timeout --signal=TERM 150s "$@"' \
+            _ "$BLENDER_PATH" --factory-startup --python-exit-code 1 \
+            --python scripts/windows_review_session.py -- \
+            addon/cloud_spiral_lobe_builder_v04.py evidence/gui-review --gui-smoke \
+            2>&1 | tee evidence/gui-review/qa_panel_gui.log
+          grep -F 'CLOUD_WINDOWS_REVIEW_GUI_SMOKE: PASS' evidence/gui-review/qa_panel_gui.log
+          python3 - <<'PY'
+          from pathlib import Path
+          import json
+          data=json.loads(Path('evidence/gui-review/windows_review_gui_smoke.json').read_text(encoding='utf8'))
+          assert data['status']=='PASS' and data['gui_window_available']
+          assert data['Cloud_QA_panel_registered'] and data['generated']['total_sample_objects']==4
+          assert data['stage_CLD04']=='INCOMPLETE' and data['stage_CLD06']=='INCOMPLETE'
+          print('CLOUD_WINDOWS_REVIEW_GUI_VALIDATED: PASS (Linux visual context only)')
+          PY
       - name: Keep GUI screenshots, report and failure logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: cloud-gui-xvfb-${{ github.run_id }}
-          path: evidence/gui/
+          path: |
+            evidence/gui/
+            evidence/gui-review/
           if-no-files-found: warn
           retention-days: 30
 
