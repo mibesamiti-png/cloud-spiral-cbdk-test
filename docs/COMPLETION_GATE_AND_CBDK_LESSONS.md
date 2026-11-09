@@ -1,5 +1,17 @@
 # CBDK-EXP-CLOUD-001 — Completion gate and transferable lessons
 
+## Final status — 2026-11-09 JST
+
+**Original CLD-01–05 MVP is 5/5 = 100% COMPLETE.** On 2026-11-09 the user reported that generation from Blender's N-panel and Ctrl+Z/Redo all worked correctly in their Windows session, answering "ちゃんと動いたよー" to the question that covered these operations. This is a **user-reported manual acceptance**, not a CI-driven or uploaded Cloud QA JSON report. All earlier Windows/Linux automated CI evidence remains separate.
+
+**Post-MVP CLD-06 (v0.4 fluffy cloud) is still 90% and aesthetically unsatisfactory**: the user described the geometry as "造形酷いけどまあいいでしょう！ｗ" (acceptable as this experiment, not a claim of achieving natural cloud quality). Merged solid / 3D print safety and full development time measurement remain unverified.
+
+Read the [complete retrospective](CLD01_05_MVP_FINAL_RETROSPECTIVE.md) or [CBDK Notion final lessons](https://app.notion.com/p/413948b749378151b5d9dd3e1e0c0563). **The agreed STOP rule is now active** for the completed MVP. A generic "続けてー" should answer "今回のロードマップは100%完了しているよー！", not start a new version or tack new steps onto the finished roadmap. Improvements to CLD-06 or CBDK require a separately requested scope.
+
+**Historical entries below retain their dated 80% / 98% figures to document what was known *before* the user's final confirmation; these are not the current status.**
+
+---
+
 ## User-agreed stop rule (2026-11-09 JST)
 
 **When the active roadmap reaches 100% accepted completion, a subsequent "続けてー" must be answered with "今回のロードマップは100%完了しているよー！"** Do not silently invent more tasks, versions, or extend that finished roadmap. A new version needs a **separate newly agreed roadmap**.
